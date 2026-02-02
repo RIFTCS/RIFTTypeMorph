@@ -7,5 +7,6 @@
 export enum TSType {
     Value = 0,
     Array = 1,
-    Object = 2
+    Object = 2,
+    Expando = 3
 }

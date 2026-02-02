@@ -1,4 +1,4 @@
-import { TSType } from "./TSType";
+import {TSType} from "./TSType";
 
 /**
  * Generic type for a class constructor.
@@ -32,9 +32,10 @@ export class TSField {
     required: boolean = true,
     alwaysInstantiate: boolean = false
   ) {
-    this.required = required;
     this.fieldType = fieldType;
-    this.instantiator = createNew;
-    this.alwaysInstantiate = alwaysInstantiate;
+
+    this.required          = fieldType == TSType.Expando ? false : required;
+    this.instantiator      = fieldType == TSType.Expando ? null : createNew;
+    this.alwaysInstantiate = fieldType == TSType.Expando ? false : alwaysInstantiate;
   }
 }

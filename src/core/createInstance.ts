@@ -3,26 +3,6 @@ import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {shouldBypassConstructor} from "./RehydrateOptions";
 
-function initializeSchemaFields(instance: any) {
-    const proto = Object.getPrototypeOf(instance);
-
-    const keys = new Set<string>([
-        ...Object.keys(proto ?? {}),
-        ...(proto?.__schemaFields ? Object.keys(proto.__schemaFields) : [])
-    ]);
-
-    for (const key of keys) {
-        let fieldDef =
-            proto[key] instanceof TSField
-                ? proto[key]
-                : proto?.__schemaFields?.[key];
-
-        if (fieldDef instanceof TSField) {
-            instance[key] = null;
-        }
-    }
-}
-
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;
 
@@ -34,6 +14,7 @@ export interface InstanceResult<T = any> {
 export interface CreateInstanceOptions {
     collectErrors?: boolean;
     bypassConstructor?: boolean;
+    errorForExtraProps?: boolean;
 }
 
 // Overloads for backwards-compatibility:
@@ -133,9 +114,23 @@ export function createInstance<T = any>(
         ...Object.keys(Object.getPrototypeOf(objInstance) ?? {})
     ]);
 
+    const consumedKeys = new Set<string>();
+    let expandoKey: string | null = null;
+
     for (const key of allKeys) {
         let fieldDef =
             (objInstance as any)[key] ?? (Object.getPrototypeOf(objInstance) as any)[key];
+
+        if (fieldDef.fieldType === TSType.Expando) {
+            if (expandoKey) {
+                fail(new RIFTError(`Multiple expando properties were defined! There can be only one.`));
+                continue;
+            }
+            expandoKey = key;
+            continue;
+        } else {
+            consumedKeys.add(key);
+        }
 
         // If the property is not a TSField, check prototype and decorator metadata
         if (!(fieldDef instanceof TSField)) {
@@ -152,7 +147,6 @@ export function createInstance<T = any>(
             }
         }
 
-
         if (!(fieldDef instanceof TSField)) {
             fail(new RIFTError(`Field was not configured properly: ${key}`, outerType));
             // If collecting errors, keep going, otherwise thrown already.
@@ -163,7 +157,6 @@ export function createInstance<T = any>(
 
         // Missing property
         if (rawValue === undefined) {
-
             // VALUE fields may have defaults
             if (
                 fieldDef.fieldType === TSType.Value &&
@@ -265,5 +258,25 @@ export function createInstance<T = any>(
     if (collectErrors) {
         return {instance, errors} as InstanceResult<T>;
     }
+
+    const extraKeys = Object.keys(data ?? {}).filter(
+        (k) => !consumedKeys.has(k)
+    );
+
+    const extraValues = extraKeys.length == 0 ? undefined : extraKeys.reduce((acc, k) => {
+        acc[k] = (data as any)[k];
+        return acc;
+    }, {} as Record<string, any>);
+
+    if (expandoKey) {
+        console.debug("[createInstance] extra properties:", {
+            outerType,
+            keys: extraKeys,
+            values: extraValues
+        });
+
+        (objInstance as any)[expandoKey] = extraValues;
+    }
+
     return instance as T;
 }
