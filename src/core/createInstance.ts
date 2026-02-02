@@ -1,6 +1,27 @@
 import {TSType} from "./TSType";
-import {TSField} from "./TSField";
 import {RIFTError} from "../utils/errors";
+import {TSField} from "./TSField";
+import {shouldBypassConstructor} from "./RehydrateOptions";
+
+function initializeSchemaFields(instance: any) {
+    const proto = Object.getPrototypeOf(instance);
+
+    const keys = new Set<string>([
+        ...Object.keys(proto ?? {}),
+        ...(proto?.__schemaFields ? Object.keys(proto.__schemaFields) : [])
+    ]);
+
+    for (const key of keys) {
+        let fieldDef =
+            proto[key] instanceof TSField
+                ? proto[key]
+                : proto?.__schemaFields?.[key];
+
+        if (fieldDef instanceof TSField) {
+            instance[key] = null;
+        }
+    }
+}
 
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;
@@ -12,6 +33,7 @@ export interface InstanceResult<T = any> {
 
 export interface CreateInstanceOptions {
     collectErrors?: boolean;
+    bypassConstructor?: boolean;
 }
 
 // Overloads for backwards-compatibility:
@@ -31,6 +53,7 @@ export function createInstance<T = any>(
     outerType: string,
     options: { collectErrors: true | false }
 ): InstanceResult<T>;
+
 
 // Implementation
 export function createInstance<T = any>(
@@ -84,8 +107,16 @@ export function createInstance<T = any>(
     // Instantiate
     let instance: any = null;
     if (instantiator) {
-        if (typeof instantiator === "function" && "prototype" in instantiator && (instantiator as any).prototype) {
-            instance = new (instantiator as Constructor<T>)();
+        if (typeof instantiator === "function" && (instantiator as any).prototype) {
+            const ctor = instantiator as Constructor<T>;
+
+            if ((options?.bypassConstructor == undefined && shouldBypassConstructor(ctor)) || options?.bypassConstructor) {
+                // Prototype-only instantiation
+                instance = Object.create(ctor.prototype);
+            } else {
+                // Safe no-arg constructor
+                instance = new ctor();
+            }
         } else if (typeof instantiator === "function") {
             instance = (instantiator as (obj: any) => T)(data);
         } else {
@@ -106,20 +137,20 @@ export function createInstance<T = any>(
         let fieldDef =
             (objInstance as any)[key] ?? (Object.getPrototypeOf(objInstance) as any)[key];
 
-            // If the property is not a TSField, check prototype and decorator metadata
-            if (!(fieldDef instanceof TSField)) {
-              const proto = Object.getPrototypeOf(objInstance);
+        // If the property is not a TSField, check prototype and decorator metadata
+        if (!(fieldDef instanceof TSField)) {
+            const proto = Object.getPrototypeOf(objInstance);
 
-              // 1 Check the prototype directly (legacy pattern)
-              if (proto && proto[key] instanceof TSField) {
+            // 1 Check the prototype directly (legacy pattern)
+            if (proto && proto[key] instanceof TSField) {
                 fieldDef = proto[key];
-              }
-
-              // 2 Check decorator metadata map (modern @Field)
-              else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
-                fieldDef = proto.__schemaFields[key];
-              }
             }
+
+            // 2 Check decorator metadata map (modern @Field)
+            else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
+                fieldDef = proto.__schemaFields[key];
+            }
+        }
 
 
         if (!(fieldDef instanceof TSField)) {
@@ -132,9 +163,33 @@ export function createInstance<T = any>(
 
         // Missing property
         if (rawValue === undefined) {
+
+            // VALUE fields may have defaults
+            if (
+                fieldDef.fieldType === TSType.Value &&
+                typeof fieldDef.instantiator === "function"
+            ) {
+                (objInstance as any)[key] = (fieldDef.instantiator as () => any)();
+                continue;
+            }
+
+            // OBJECT fields: missing means null (never auto-create)
+            if (fieldDef.fieldType === TSType.Object) {
+                if (fieldDef.required) {
+                    fail(new RIFTError(`Missing required property: ${key}`, outerType));
+                }
+                (objInstance as any)[key] = null;
+                continue;
+            }
+
+            // Required value with no default
             if (fieldDef.required) {
                 fail(new RIFTError(`Missing required property: ${key}`, outerType));
+                (objInstance as any)[key] = null;
+                continue;
             }
+
+            // Optional value with no default
             (objInstance as any)[key] = null;
             continue;
         }

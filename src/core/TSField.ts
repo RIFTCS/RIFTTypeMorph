@@ -12,6 +12,9 @@ export class TSField {
   /** Whether this field must be present in the input JSON. */
   public required: boolean;
 
+  /** If this field will instantiate defaults, even for nested object types. */
+  public alwaysInstantiate: boolean;
+
   /** The type of field — Value, Array, or Object. */
   public fieldType: TSType;
 
@@ -26,10 +29,12 @@ export class TSField {
   constructor(
     fieldType: TSType,
     createNew: ((obj: any) => any) | Constructor | null = null,
-    required: boolean = true
+    required: boolean = true,
+    alwaysInstantiate: boolean = false
   ) {
     this.required = required;
     this.fieldType = fieldType;
     this.instantiator = createNew;
+    this.alwaysInstantiate = alwaysInstantiate;
   }
 }
