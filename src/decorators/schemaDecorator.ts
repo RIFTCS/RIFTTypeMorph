@@ -56,6 +56,16 @@ export function Field(
   };
 }
 
+/**
+ * @OptionalField decorator
+ * Sets:
+ *  - instantiator = null
+ *  - required = false
+ */
+export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) | Constructor | null) {
+  return Field(type, instantiator, false);
+}
+
 /** Extracts all @Field metadata from a class instance. */
 export function getSchemaFields(instance: any): Record<string, TSField> {
   const proto = Object.getPrototypeOf(instance);
