@@ -1,4 +1,4 @@
-import { TSField, TSType } from "../core";
+import { TSField, TSType } from "../index";
 import type { Constructor } from "../core/TSField";
 import {RIFTError} from "../utils/errors";
 

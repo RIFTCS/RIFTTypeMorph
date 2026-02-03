@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { TSType } from "../src/core";
-import { TSField } from "../src/core";
-import { createInstance } from "../src/core";
+import { TSType } from "../src";
+import { TSField } from "../src";
+import { createInstance } from "../src";
 import { validateInstance } from "../src/core/validateInstance";
 import { RIFTError } from "../src/utils/errors";
 

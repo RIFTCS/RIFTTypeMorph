@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Field, getSchemaFields } from "../src/decorators/schemaDecorator";
-import { TSType } from "../src/core";
+import { TSType } from "../src";
 
 class Person {
   @Field(TSType.Value)

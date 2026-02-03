@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Field, OptionalField, Ignore } from "../src/decorators/schemaDecorator";
 import { TSType } from "../src/core/TSType";
 import { serialiseInstance } from "../src/core/serialiseInstance";
-import { createInstance } from "../src/core";
+import { createInstance } from "../src";
 import { RIFTError } from "../src/utils/errors";
 
 /* ---------------------------------------------

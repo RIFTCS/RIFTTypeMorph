@@ -4,7 +4,7 @@ import {TSType} from "../src/core/TSType";
 import {Field} from "../src/decorators/schemaDecorator";
 import {BypassConstructor} from "../src/core/RehydrateOptions";
 import {RIFTError} from "../src/utils/errors";
-import {TSField} from "../src/core";
+import {TSField} from "../src";
 
 /* ------------------------------------------------------------------ */
 /* Expando test schemas (decorator-only)                               */

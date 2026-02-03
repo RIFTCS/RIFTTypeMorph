@@ -1,4 +1,4 @@
-import { createInstance, TSField, TSType } from "../src/core";
+import { createInstance, TSField, TSType } from "../src";
 
 class Entry {
   id = new TSField(TSType.Value) as any;

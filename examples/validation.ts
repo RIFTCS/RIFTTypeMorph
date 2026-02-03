@@ -1,4 +1,4 @@
-import {TSField, TSType} from "../src/core";
+import {TSField, TSType} from "../src";
 import {validateInstance} from "../src/core/validateInstance";
 
 class Product {

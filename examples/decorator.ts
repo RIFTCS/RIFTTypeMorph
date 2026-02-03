@@ -1,5 +1,5 @@
-import { TSType } from "../src/core";
-import { createInstance } from "../src/core";
+import { TSType } from "../src";
+import { createInstance } from "../src";
 import { Field } from "../src/decorators/schemaDecorator";
 
 class Address {
