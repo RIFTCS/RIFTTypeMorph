@@ -1,7 +1,7 @@
 import {TSType} from "./TSType";
 import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
-import {shouldBypassConstructor} from "./RehydrateOptions";
+import {shouldBypassConstructor} from "../decorators/rehydrateOptions";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;

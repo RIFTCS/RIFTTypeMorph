@@ -2,7 +2,7 @@ import {describe, it, expect} from "vitest";
 import {createInstance} from "../src/core/createInstance";
 import {TSType} from "../src/core/TSType";
 import {Field} from "../src/decorators/schemaDecorator";
-import {BypassConstructor} from "../src/core/RehydrateOptions";
+import {BypassConstructor} from "../src/decorators/rehydrateOptions";
 import {RIFTError} from "../src/utils/errors";
 import {TSField} from "../src";
 
