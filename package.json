@@ -1,36 +1,35 @@
 {
   "name": "rifttypemorph",
   "version": "1.0.0",
-  "description": "Lightweight runtime type validation and JSON-to-class mapping for TypeScript. rifttypemorph turns plain JSON into fully typed, validated objects using schema definitions or decorators - perfect for API deserialization and model safety.",
+  "description": "Lightweight runtime type validation and JSON-to-class mapping for TypeScript.",
   "author": "Liam <liam@riftcs.com> (RIFT Pty Ltd)",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/RIFTCS/rifttypemorph.git"
+
+  "type": "commonjs",
+
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./core": {
+      "require": "./dist/core/index.js",
+      "import": "./dist/core/index.js",
+      "types": "./dist/core/index.d.ts"
+    },
+    "./core/serialiseInstance": {
+      "require": "./dist/core/serialiseInstance.js",
+      "import": "./dist/core/serialiseInstance.js",
+      "types": "./dist/core/serialiseInstance.d.ts"
+    }
   },
-  "bugs": {
-    "url": "https://github.com/RIFTCS/rifttypemorph/issues"
-  },
-  "homepage": "https://github.com/RIFTCS/rifttypemorph#readme",
-  "keywords": [
-    "typescript",
-    "runtime",
-    "validation",
-    "schema",
-    "json",
-    "deserialization",
-    "reflection",
-    "factory",
-    "instance",
-    "typing",
-    "rift"
-  ],
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+
+  "files": ["dist"],
+
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
@@ -38,6 +37,7 @@
     "clean": "rm -rf dist",
     "prepare": "npm run build"
   },
+
   "devDependencies": {
     "typescript": "^5.6.3",
     "vitest": "^2.1.0",
