@@ -50,7 +50,6 @@ export function createInstance<T = any>(
     const fail = (err: RIFTError) => {
         if (collectErrors) {
             errors.push(err);
-            // In collectErrors mode, we'll return a result object at the end.
             return;
         }
         throw err;
@@ -82,28 +81,51 @@ export function createInstance<T = any>(
             fail(new RIFTError("Field value was null but marked as required", outerType));
             if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
         }
-        return collectErrors ? ({instance: null, errors} as InstanceResult<T>) : (null as any as T);
+        return collectErrors
+            ? ({instance: null, errors} as InstanceResult<T>)
+            : (null as any as T);
     }
 
     // Instantiate
     let instance: any = null;
-    if (instantiator) {
-        if (typeof instantiator === "function" && (instantiator as any).prototype) {
-            const ctor = instantiator as Constructor<T>;
 
-            if ((options?.bypassConstructor == undefined && shouldBypassConstructor(ctor)) || options?.bypassConstructor) {
-                // Prototype-only instantiation
+    if (typeof instantiator === "function" && (instantiator as any).prototype) {
+        const ctor = instantiator as Constructor<T>;
+        const ctorAny = ctor as any;
+
+        // Prefer static deserialise(obj) if present
+        if (typeof ctorAny.deserialise === "function") {
+            try {
+                instance = ctorAny.deserialise(data);
+
+                // IMPORTANT: deserialise is authoritative
+                return collectErrors
+                    ? ({instance, errors} as InstanceResult<T>)
+                    : (instance as T);
+
+            } catch (e: any) {
+                fail(new RIFTError(
+                    `Error during deserialise(): ${e?.message ?? e}`,
+                    outerType
+                ));
+                if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
+            }
+        } else {
+            // Existing behavior
+            if (
+                (options?.bypassConstructor === undefined && shouldBypassConstructor(ctor)) ||
+                options?.bypassConstructor
+            ) {
                 instance = Object.create(ctor.prototype);
             } else {
-                // Safe no-arg constructor
                 instance = new ctor();
             }
-        } else if (typeof instantiator === "function") {
-            instance = (instantiator as (obj: any) => T)(data);
-        } else {
-            fail(new RIFTError("Invalid instantiator type", outerType));
-            if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
         }
+    } else if (typeof instantiator === "function") {
+        instance = (instantiator as (obj: any) => T)(data);
+    } else {
+        fail(new RIFTError("Invalid instantiator type", outerType));
+        if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
     }
 
     const objInstance: any = instance as object;
@@ -123,7 +145,9 @@ export function createInstance<T = any>(
 
         if (fieldDef.fieldType === TSType.Expando) {
             if (expandoKey) {
-                fail(new RIFTError(`Multiple expando properties were defined! There can be only one.`));
+                fail(new RIFTError(
+                    "Multiple expando properties were defined! There can be only one."
+                ));
                 continue;
             }
             expandoKey = key;
@@ -132,32 +156,24 @@ export function createInstance<T = any>(
             consumedKeys.add(key);
         }
 
-        // If the property is not a TSField, check prototype and decorator metadata
         if (!(fieldDef instanceof TSField)) {
             const proto = Object.getPrototypeOf(objInstance);
 
-            // 1 Check the prototype directly (legacy pattern)
             if (proto && proto[key] instanceof TSField) {
                 fieldDef = proto[key];
-            }
-
-            // 2 Check decorator metadata map (modern @Field)
-            else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
+            } else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
                 fieldDef = proto.__schemaFields[key];
             }
         }
 
         if (!(fieldDef instanceof TSField)) {
             fail(new RIFTError(`Field was not configured properly: ${key}`, outerType));
-            // If collecting errors, keep going, otherwise thrown already.
             continue;
         }
 
         const rawValue = (data as any)[key];
 
-        // Missing property
         if (rawValue === undefined) {
-            // VALUE fields may have defaults
             if (
                 fieldDef.fieldType === TSType.Value &&
                 typeof fieldDef.instantiator === "function"
@@ -166,7 +182,6 @@ export function createInstance<T = any>(
                 continue;
             }
 
-            // OBJECT fields: missing means null (never auto-create)
             if (fieldDef.fieldType === TSType.Object) {
                 if (fieldDef.required) {
                     fail(new RIFTError(`Missing required property: ${key}`, outerType));
@@ -175,24 +190,24 @@ export function createInstance<T = any>(
                 continue;
             }
 
-            // Required value with no default
             if (fieldDef.required) {
                 fail(new RIFTError(`Missing required property: ${key}`, outerType));
                 (objInstance as any)[key] = null;
                 continue;
             }
 
-            // Optional value with no default
             (objInstance as any)[key] = null;
             continue;
         }
 
-        // Type-specific handling with nested error capture
         const nestedContextBase = `${outerType}.${key}`;
 
         if (fieldDef.fieldType === TSType.Array) {
             if (!Array.isArray(rawValue)) {
-                fail(new RIFTError(`Invalid type: expected array, got ${typeof rawValue}`, nestedContextBase));
+                fail(new RIFTError(
+                    `Invalid type: expected array, got ${typeof rawValue}`,
+                    nestedContextBase
+                ));
                 (objInstance as any)[key] = null;
                 continue;
             }
@@ -211,13 +226,14 @@ export function createInstance<T = any>(
                     array.push(res.instance);
                     if (res.errors.length) errors.push(...res.errors);
                 } else {
-                    const elementInstance = createInstance(
-                        elementValue,
-                        null,
-                        fieldDef,
-                        `${nestedContextBase}[${i}]`
-                    ) as any;
-                    array.push(elementInstance);
+                    array.push(
+                        createInstance(
+                            elementValue,
+                            null,
+                            fieldDef,
+                            `${nestedContextBase}[${i}]`
+                        )
+                    );
                 }
             }
             (objInstance as any)[key] = array;
@@ -241,7 +257,7 @@ export function createInstance<T = any>(
                     null,
                     fieldDef,
                     nestedContextBase
-                ) as any;
+                );
             }
             continue;
         }
@@ -251,7 +267,6 @@ export function createInstance<T = any>(
             continue;
         }
 
-        // Unknown field type
         fail(new RIFTError(`Unknown field type: ${fieldDef.fieldType}`, outerType));
     }
 
@@ -263,20 +278,18 @@ export function createInstance<T = any>(
         (k) => !consumedKeys.has(k)
     );
 
-    const extraValues = extraKeys.length == 0 ? undefined : extraKeys.reduce((acc, k) => {
-        acc[k] = (data as any)[k];
-        return acc;
-    }, {} as Record<string, any>);
+    const extraValues =
+        extraKeys.length === 0
+            ? undefined
+            : extraKeys.reduce((acc, k) => {
+                acc[k] = (data as any)[k];
+                return acc;
+            }, {} as Record<string, any>);
 
     if (expandoKey) {
-        console.debug("[createInstance] extra properties:", {
-            outerType,
-            keys: extraKeys,
-            values: extraValues
-        });
-
         (objInstance as any)[expandoKey] = extraValues;
     }
 
     return instance as T;
 }
+
