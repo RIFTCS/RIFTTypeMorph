@@ -61,6 +61,25 @@ class FailingSerialise {
     x!: number;
 }
 
+it("does not serialise fields without @Field", () => {
+    class ExtraFieldModel {
+        @Field(TSType.Value)
+        a!: number;
+
+        // not decorated
+        b!: number;
+    }
+
+    const inst = Object.create(ExtraFieldModel.prototype) as ExtraFieldModel;
+    inst.a = 1;
+    inst.b = 2;
+
+    const out = serialiseInstance(inst);
+
+    expect(out).toEqual({a: 1});
+});
+
+
 class OptionalModel {
     @OptionalField(TSType.Value)
     maybe?: number;

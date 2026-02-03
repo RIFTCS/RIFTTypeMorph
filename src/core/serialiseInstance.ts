@@ -1,13 +1,18 @@
-import {TSType} from "./TSType";
-import {RIFTError} from "../utils/errors";
-import {TSField} from "./TSField";
+import { TSType } from "./TSType";
+import { RIFTError } from "../utils/errors";
+import { TSField } from "./TSField";
 
 type Constructor<T = any> = new (...args: any[]) => T;
+
+export interface SerialiseInstanceOptions {
+    errorForExtraProps?: boolean;
+}
 
 export function serialiseInstance(
     instance: any,
     field: TSField | null = null,
-    outerType: string = "root"
+    outerType: string = "root",
+    config?: SerialiseInstanceOptions
 ): any {
     if (instance === null || instance === undefined) {
         return null;
@@ -31,26 +36,23 @@ export function serialiseInstance(
     const objInstance: any = instance as object;
     const output: Record<string, any> = {};
 
-    // Collect instance + prototype keys (decorators supported)
-    const allKeys = new Set<string>([
-        ...Object.keys(objInstance),
-        ...Object.keys(Object.getPrototypeOf(objInstance) ?? {})
-    ]);
+    const proto = Object.getPrototypeOf(objInstance);
+
+    const schemaFields: Record<string, TSField> =
+        proto?.__schemaFields ?? {};
+
+    const ignoredFields: Set<string> =
+        proto?.__ignoredFields ?? new Set<string>();
+
+    // Collect own enumerable props only for extra-prop detection
+    const ownKeys = Object.keys(objInstance);
 
     let expandoKey: string | null = null;
 
-    for (const key of allKeys) {
-        let fieldDef =
-            objInstance[key] ?? (Object.getPrototypeOf(objInstance) as any)?.[key];
-
-        if (!(fieldDef instanceof TSField)) {
-            const proto = Object.getPrototypeOf(objInstance);
-
-            if (proto && proto[key] instanceof TSField) {
-                fieldDef = proto[key];
-            } else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
-                fieldDef = proto.__schemaFields[key];
-            }
+    // --- Schema traversal ---
+    for (const [key, fieldDef] of Object.entries(schemaFields)) {
+        if (ignoredFields.has(key)) {
+            continue;
         }
 
         if (!(fieldDef instanceof TSField)) {
@@ -85,7 +87,8 @@ export function serialiseInstance(
                 output[key] = serialiseInstance(
                     value,
                     fieldDef,
-                    nestedContextBase
+                    nestedContextBase,
+                    config
                 );
                 break;
 
@@ -101,7 +104,8 @@ export function serialiseInstance(
                     serialiseInstance(
                         el,
                         fieldDef,
-                        `${nestedContextBase}[${i}]`
+                        `${nestedContextBase}[${i}]`,
+                        config
                     )
                 );
                 break;
@@ -114,13 +118,42 @@ export function serialiseInstance(
         }
     }
 
-    // Expando support
+    // --- Expando support ---
     if (expandoKey) {
         const expandoValue = objInstance[expandoKey];
         if (expandoValue && typeof expandoValue === "object") {
             for (const [k, v] of Object.entries(expandoValue)) {
                 output[k] = v;
             }
+        }
+    }
+
+    // --- Extra property detection ---
+    if (config?.errorForExtraProps) {
+        for (const key of ownKeys) {
+            if (ignoredFields.has(key)) {
+                continue;
+            }
+
+            if (schemaFields[key]) {
+                continue;
+            }
+
+            if (expandoKey) {
+                const expandoValue = objInstance[expandoKey];
+                if (
+                    expandoValue &&
+                    typeof expandoValue === "object" &&
+                    key in expandoValue
+                ) {
+                    continue;
+                }
+            }
+
+            throw new RIFTError(
+                `Unexpected extra property during serialisation: ${key}`,
+                outerType
+            );
         }
     }
 

@@ -71,6 +71,58 @@ export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) |
   return Field(type, instantiator, false, ifEmpty);
 }
 
+/**
+ * @Ignore decorator
+ * Marks a property to be skipped during serialisation.
+ */
+export function Ignore() {
+  return function (...args: any[]) {
+    // --- Modern decorators (TS 5.6+) ---
+    if (
+      args.length >= 1 &&
+      args.some((a) => a && typeof a === "object" && "kind" in a)
+    ) {
+      const context = args.find((a) => a && typeof a === "object" && "kind" in a);
+      const key = String(context.name);
+
+      context.addInitializer(function (this: any) {
+        const proto = Object.getPrototypeOf(this);
+        if (!proto.__ignoredFields) {
+          Object.defineProperty(proto, "__ignoredFields", {
+            value: new Set<string>(),
+            enumerable: false,
+            configurable: false,
+            writable: false,
+          });
+        }
+        proto.__ignoredFields.add(key);
+      });
+      return;
+    }
+
+    // --- Legacy decorators ---
+    const [target, propertyKey] = args;
+    if (!target || !propertyKey) return;
+
+    if (!target.__ignoredFields) {
+      Object.defineProperty(target, "__ignoredFields", {
+        value: new Set<string>(),
+        enumerable: false,
+        configurable: false,
+        writable: false,
+      });
+    }
+
+    target.__ignoredFields.add(String(propertyKey));
+  };
+}
+
+/** Extracts all @Ignore metadata from a class instance. */
+export function getIgnoredFields(instance: any): Set<string> {
+  const proto = Object.getPrototypeOf(instance);
+  return proto?.__ignoredFields ?? new Set();
+}
+
 /** Extracts all @Field metadata from a class instance. */
 export function getSchemaFields(instance: any): Record<string, TSField> {
   const proto = Object.getPrototypeOf(instance);
