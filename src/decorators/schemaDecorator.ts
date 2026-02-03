@@ -1,5 +1,6 @@
 import { TSField, TSType } from "../core";
 import type { Constructor } from "../core/TSField";
+import {RIFTError} from "../utils/errors";
 
 /**
  * Universal @Field decorator compatible with both legacy (experimentalDecorators)
@@ -8,8 +9,12 @@ import type { Constructor } from "../core/TSField";
 export function Field(
   type: TSType,
   instantiator?: ((obj: any) => any) | Constructor | null,
-  required: boolean = true
+  required: boolean = true,
+  ifEmpty?: (() => any)
 ) {
+    if(required && ifEmpty){
+        throw new RIFTError("Cannot specify both required and ifEmpty");
+    }
   return function (...args: any[]) {
     // --- Modern decorator (TS 5.6+, Node 22+) ---
     // Can be (context) or (value, context) depending on transform
@@ -30,7 +35,7 @@ export function Field(
             writable: true,
           });
         }
-        const field = new TSField(type, instantiator ?? null, required);
+        const field = new TSField(type, instantiator ?? null, required, ifEmpty);
         proto.__schemaFields[key] = field;
         (proto as any)[key] = field;
       });
@@ -50,7 +55,7 @@ export function Field(
       });
     }
 
-    const field = new TSField(type, instantiator ?? null, required);
+    const field = new TSField(type, instantiator ?? null, required, ifEmpty);
     target.__schemaFields[String(propertyKey)] = field;
     (target as any)[propertyKey] = field;
   };
@@ -62,8 +67,8 @@ export function Field(
  *  - instantiator = null
  *  - required = false
  */
-export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) | Constructor | null) {
-  return Field(type, instantiator, false);
+export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) | Constructor | null, ifEmpty?: (() => any)) {
+  return Field(type, instantiator, false, ifEmpty);
 }
 
 /** Extracts all @Field metadata from a class instance. */

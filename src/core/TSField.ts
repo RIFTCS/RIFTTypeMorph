@@ -13,7 +13,7 @@ export class TSField {
   public required: boolean;
 
   /** If this field will instantiate defaults, even for nested object types. */
-  public alwaysInstantiate: boolean;
+  public ifEmpty?: (() => any);
 
   /** The type of field — Value, Array, or Object. */
   public fieldType: TSType;
@@ -30,12 +30,12 @@ export class TSField {
     fieldType: TSType,
     createNew: ((obj: any) => any) | Constructor | null = null,
     required: boolean = true,
-    alwaysInstantiate: boolean = false
+    ifEmpty?: (() => any)
   ) {
     this.fieldType = fieldType;
 
     this.required          = fieldType == TSType.Expando ? false : required;
     this.instantiator      = fieldType == TSType.Expando ? null : createNew;
-    this.alwaysInstantiate = fieldType == TSType.Expando ? false : alwaysInstantiate;
+    this.ifEmpty           = fieldType == TSType.Expando ? undefined : ifEmpty;
   }
 }

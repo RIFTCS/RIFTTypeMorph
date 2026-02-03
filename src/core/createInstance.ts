@@ -173,6 +173,39 @@ export function createInstance<T = any>(
 
         const rawValue = (data as any)[key];
 
+        // explicit null handling for instantiateIfNull
+        if (rawValue === null && typeof fieldDef.ifEmpty === "function") {
+            try {
+                if (collectErrors) {
+                    const res = createInstance(
+                        fieldDef.ifEmpty(),
+                        null,
+                        fieldDef,
+                        `${outerType}.${key}`,
+                        {collectErrors: true}
+                    ) as InstanceResult<any>;
+
+                    (objInstance as any)[key] = res.instance;
+                    if (res.errors.length) errors.push(...res.errors);
+                } else {
+                    (objInstance as any)[key] = createInstance(
+                        fieldDef.ifEmpty(),
+                        null,
+                        fieldDef,
+                        `${outerType}.${key}`
+                    );
+                }
+            } catch (e) {
+                fail(new RIFTError(
+                    `Error during ifEmpty instantiation for field: ${key}`,
+                    outerType
+                ));
+                (objInstance as any)[key] = null;
+            }
+
+            continue;
+        }
+
         if (rawValue === undefined) {
             if (
                 fieldDef.fieldType === TSType.Value &&
