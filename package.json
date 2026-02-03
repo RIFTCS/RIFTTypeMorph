@@ -12,19 +12,9 @@
 
   "exports": {
     ".": {
-      "require": "./dist/index.js",
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./core": {
       "require": "./dist/core/index.js",
       "import": "./dist/core/index.js",
       "types": "./dist/core/index.d.ts"
-    },
-    "./core/serialiseInstance": {
-      "require": "./dist/core/serialiseInstance.js",
-      "import": "./dist/core/serialiseInstance.js",
-      "types": "./dist/core/serialiseInstance.d.ts"
     }
   },
 
