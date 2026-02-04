@@ -36,7 +36,7 @@ function inferInstantiatorFromField<T>(
 
 export function createInstance<T = any>(
     data: any,
-    instantiator?: Instantiator<T> | null,
+    instantiator: Instantiator<T>,
     field?: TSField | null,
     outerType?: string
 ): T;
