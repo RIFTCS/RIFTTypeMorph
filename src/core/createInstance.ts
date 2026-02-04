@@ -263,13 +263,20 @@ export function createInstance<T = any>(
                     continue;
                 }
 
+                const elementField = new TSField(
+                    fieldDef.fieldType ?? TSType.Object,
+                    fieldDef.instantiator ?? null,
+                    fieldDef.required
+                );
+
                 const res = createInstance(
                     rawValue[i],
                     null,
-                    fieldDef,
+                    elementField,
                     `${nestedContext}[${i}]`,
                     options ?? {}
-                ) as any;
+                );
+
 
                 arr[i] = collectErrors ? res.instance : res;
 
