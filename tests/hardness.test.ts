@@ -1,5 +1,6 @@
 import {describe, it, expect} from "vitest";
 import {createInstance, Field, OptionalField, TSField, TSType} from "../src";
+import {RIFTError} from "../src/utils/errors";
 
 /**
  * Helper to assert that no TSField exists anywhere
@@ -199,6 +200,258 @@ describe("schema inheritance and prototype safety", () => {
         // Derived prototype exposes full effective schema (Option A)
         expect(derivedProto.id).toBeInstanceOf(TSField);
         expect(derivedProto.name).toBeInstanceOf(TSField);
+    });
+
+});
+
+describe("createInstance – type mismatch handling", () => {
+
+    it("throws when Object field receives a primitive", () => {
+        class Example {
+            @Field(TSType.Object, Example)
+            child!: Example;
+        }
+
+        expect(() =>
+            createInstance({ child: 123 }, Example)
+        ).toThrow(RIFTError);
+    });
+
+    it("throws when Array field receives a non-array", () => {
+        class Example {
+            @Field(TSType.Array, Example)
+            items!: Example[];
+        }
+
+        expect(() =>
+            createInstance({ items: {} }, Example)
+        ).toThrow(RIFTError);
+    });
+
+    it("allows Value field to receive any primitive", () => {
+        class Example {
+            @Field(TSType.Value)
+            value!: any;
+        }
+
+        const inst = createInstance({ value: { x: 1 } }, Example) as Example;
+        expect(inst.value).toEqual({ x: 1 });
+    });
+
+});
+
+/* ------------------------------------------------------------------ */
+/* collectErrors deep behavior                                         */
+/* ------------------------------------------------------------------ */
+
+describe("createInstance – deep collectErrors behavior", () => {
+
+    it("collects multiple sibling errors instead of throwing", () => {
+        class Example {
+            @Field(TSType.Value)
+            a!: string;
+
+            @Field(TSType.Value)
+            b!: string;
+        }
+
+        const res = createInstance(
+            { a: null, b: null },
+            Example,
+            null,
+            "root",
+            { collectErrors: true, errorForNullRequired: true }
+        );
+
+        expect(res.errors.length).toBe(2);
+        expect(res.instance).toBeTruthy();
+    });
+
+    it("continues hydrating valid fields when errors occur", () => {
+        class Example {
+            @Field(TSType.Value)
+            ok!: string;
+
+            @Field(TSType.Value)
+            bad!: string;
+        }
+
+        const res = createInstance(
+            { ok: "yes", bad: null },
+            Example,
+            null,
+            "root",
+            { collectErrors: true, errorForNullRequired: true}
+        );
+
+        expect(res.instance?.ok).toBe("yes");
+        expect(res.instance?.bad).toBeNull();
+        expect(res.errors.length).toBe(1);
+    });
+
+    it("collects nested array element errors", () => {
+        class Child {
+            @Field(TSType.Value)
+            id!: string;
+        }
+
+        class Parent {
+            @Field(TSType.Array, Child)
+            children!: Child[];
+        }
+
+        const res = createInstance(
+            {
+                children: [
+                    { id: "ok" },
+                    { id: null },
+                    "invalid"
+                ]
+            },
+            Parent,
+            null,
+            "root",
+            { collectErrors: true }
+        );
+
+        expect(res.errors.length).toBeGreaterThan(0);
+        expect(res.instance?.children.length).toBe(3);
+        expect(res.instance?.children[0]?.id).toBe("ok");
+    });
+
+});
+
+/* ------------------------------------------------------------------ */
+/* bypassConstructor + errors                                          */
+/* ------------------------------------------------------------------ */
+
+describe("createInstance – bypassConstructor with errors", () => {
+
+    it("does not call constructor even when errors occur", () => {
+        let constructed = false;
+
+        class Example {
+            constructor() {
+                constructed = true;
+            }
+
+            @Field(TSType.Value)
+            id!: string;
+        }
+
+        const res = createInstance(
+            { id: null },
+            Example,
+            null,
+            "root",
+            { bypassConstructor: true, collectErrors: true, errorForNullRequired: true}
+        );
+
+        expect(constructed).toBe(false);
+        expect(res.errors.length).toBe(1);
+    });
+
+    it("collects errors when default factory throws under bypassConstructor", () => {
+        class Example {
+            @Field(TSType.Value, () => {
+                throw new Error("boom");
+            })
+            value!: number;
+        }
+
+        const res = createInstance(
+            {},
+            Example,
+            null,
+            "root",
+            { bypassConstructor: true, collectErrors: true }
+        );
+
+        expect(res.errors.length).toBe(1);
+        expect(res.instance?.value).toBeNull();
+    });
+
+});
+
+/* ------------------------------------------------------------------ */
+/* undefined vs missing semantics                                      */
+/* ------------------------------------------------------------------ */
+
+describe("createInstance – undefined vs missing semantics", () => {
+
+    it("treats explicit undefined the same as missing", () => {
+        class Example {
+            @OptionalField(TSType.Value)
+            value!: string | null;
+        }
+
+        const inst = createInstance(
+            { value: undefined },
+            Example
+        ) as Example;
+
+        expect(inst.value).toBeNull();
+    });
+
+    it("handles sparse arrays without crashing", () => {
+        class Example {
+            @Field(TSType.Array, Example)
+            items!: Example[];
+        }
+
+        const data: any = [];
+        data[1] = {};
+
+        const res = createInstance(
+            { items: data },
+            Example,
+            null,
+            "root",
+            { collectErrors: true }
+        );
+
+        expect(res.instance?.items.length).toBe(2);
+    });
+
+});
+
+/* ------------------------------------------------------------------ */
+/* instantiator edge cases                                             */
+/* ------------------------------------------------------------------ */
+
+describe("createInstance – instantiator edge cases", () => {
+
+    it("throws if instantiator returns undefined for Object field", () => {
+        class Child {}
+
+        class Parent {
+            @Field(TSType.Object, () => undefined)
+            child!: Child;
+        }
+
+        expect(() =>
+            createInstance({ child: {} }, Parent)
+        ).toThrow(RIFTError);
+    });
+
+    it("collects error if instantiator throws", () => {
+        class Parent {
+            @Field(TSType.Object, () => {
+                throw new Error("bad");
+            })
+            child!: any;
+        }
+
+        const res = createInstance(
+            { child: {} },
+            Parent,
+            null,
+            "root",
+            { collectErrors: true }
+        );
+
+        expect(res.errors.length).toBe(1);
+        expect(res.instance?.child).toBeNull();
     });
 
 });

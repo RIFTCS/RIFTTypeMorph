@@ -16,6 +16,7 @@ export interface CreateInstanceOptions {
     collectErrors?: boolean;
     bypassConstructor?: boolean;
     errorForExtraProps?: boolean;
+    errorForNullRequired?: boolean;
 }
 
 export function createInstance<T = any>(
@@ -97,12 +98,34 @@ export function createInstance<T = any>(
             instance = new ctor();
         }
     } else if (typeof instantiator === "function") {
-        // @ts-ignore
-        instance = instantiator(data);
+        try {
+            // @ts-ignore
+            instance = instantiator(data);
+        } catch (e: any) {
+            fail(
+                new RIFTError(
+                    `Error during instantiation: ${e?.message ?? e}`,
+                    outerType
+                )
+            );
+            return collectErrors ? {instance: null, errors} : null as any;
+        }
     } else {
         fail(new RIFTError("Invalid instantiator type", outerType));
         return collectErrors ? {instance: null, errors} : null as any;
     }
+
+    // Guard: instantiator must return a concrete object instance
+    if (instance === null || instance === undefined) {
+        fail(new RIFTError("Instantiator returned null/undefined", outerType));
+        return collectErrors ? {instance: null, errors} : null as any;
+    }
+
+    if (typeof instance !== "object") {
+        fail(new RIFTError(`Invalid instantiator result type: ${typeof instance}`, outerType));
+        return collectErrors ? {instance: null, errors} : null as any;
+    }
+
 
     const {fields, expandoKey, includedKeys} = parseClass(instance);
     const consumedKeys = new Set<string>();
@@ -129,6 +152,21 @@ export function createInstance<T = any>(
             }
             continue;
         }
+
+        if (
+            rawValue === null &&
+            fieldDef.required &&
+            options?.errorForNullRequired === true &&
+            typeof fieldDef.ifEmpty !== "function"
+        ) {
+            fail(new RIFTError(
+                `Field value was null but marked as required`,
+                nestedContext
+            ));
+            instance[key] = null;
+            continue;
+        }
+
 
         if (rawValue === undefined) {
             // Default factory for value types
@@ -166,19 +204,32 @@ export function createInstance<T = any>(
                 continue;
             }
 
-            const arr: any[] = [];
-            rawValue.forEach((v, i) => {
+            const arr = new Array(rawValue.length);
+
+            for (let i = 0; i < rawValue.length; i++) {
+                if (!(i in rawValue)) {
+                    // preserve hole
+                    arr[i] = undefined;
+                    continue;
+                }
+
                 const res = createInstance(
-                    v,
+                    rawValue[i],
                     null,
                     fieldDef,
                     `${nestedContext}[${i}]`,
-                    {collectErrors: collectErrors}
+                    {collectErrors}
                 ) as any;
-                arr.push(collectErrors ? res.instance : res);
-                if (collectErrors && res.errors?.length) errors.push(...res.errors);
-            });
+
+                arr[i] = collectErrors ? res.instance : res;
+
+                if (collectErrors && res.errors?.length) {
+                    errors.push(...res.errors);
+                }
+            }
+
             instance[key] = arr;
+
             continue;
         }
 
