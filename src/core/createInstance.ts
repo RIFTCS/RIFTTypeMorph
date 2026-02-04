@@ -142,7 +142,7 @@ export function createInstance<T = any>(
                     null,
                     fieldDef,
                     nestedContext,
-                    {collectErrors: collectErrors}
+                    options ?? {}
                 ) as any;
                 instance[key] = collectErrors ? res.instance : res;
                 if (collectErrors && res.errors?.length) errors.push(...res.errors);
@@ -218,7 +218,7 @@ export function createInstance<T = any>(
                     null,
                     fieldDef,
                     `${nestedContext}[${i}]`,
-                    {collectErrors}
+                    options ?? {}
                 ) as any;
 
                 arr[i] = collectErrors ? res.instance : res;
@@ -239,7 +239,7 @@ export function createInstance<T = any>(
                 null,
                 fieldDef,
                 nestedContext,
-                {collectErrors: collectErrors}
+                options ?? {}
             ) as any;
             instance[key] = collectErrors ? res.instance : res;
             if (collectErrors && res.errors?.length) errors.push(...res.errors);
