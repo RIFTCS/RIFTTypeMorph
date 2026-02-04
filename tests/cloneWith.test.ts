@@ -125,7 +125,7 @@ describe("cloneWith (schema-derived)", () => {
 
         const b = cloneWith(a, { id: 2 });
 
-        expect(serialiseInstance(b)).toEqual({
+        expect(serialiseInstance(b, {flattenExpando: true})).toEqual({
             id: 2,
             foo: "bar",
             count: 5

@@ -339,22 +339,44 @@ export function createInstance<T = any>(
     // ---- Extra props / expando
     const extraKeys = Object.keys(data ?? {}).filter(k => {
         if (consumedKeys.has(k)) return false;
-        return !(includedKeys && includedKeys.has(k));
+        if (includedKeys && includedKeys.has(k)) return false;
+        if (k === expandoKey) return false;
+        return true;
     });
 
     if (expandoKey) {
+        const explicitExpando = data?.[expandoKey];
+
+        if (
+            options?.errorForExtraProps &&
+            explicitExpando === undefined &&
+            extraKeys.length > 0
+        ) {
+            fail(new RIFTError(
+                `Unexpected flattened expando properties: ${extraKeys.join(", ")}`,
+                outerType
+            ));
+        }
+
         Object.defineProperty(instance, expandoKey, {
             value:
-                extraKeys.length === 0
-                    ? {}
-                    : Object.fromEntries(extraKeys.map(k => [k, data[k]])),
+                explicitExpando && typeof explicitExpando === "object"
+                    ? explicitExpando
+                    : extraKeys.length === 0
+                        ? {}
+                        : Object.fromEntries(extraKeys.map(k => [k, data[k]])),
             writable: true,
             enumerable: true,
             configurable: true
         });
+
     } else if (options?.errorForExtraProps && extraKeys.length) {
-        fail(new RIFTError(`Unexpected properties: ${extraKeys.join(", ")}`, outerType));
+        fail(new RIFTError(
+            `Unexpected properties: ${extraKeys.join(", ")}`,
+            outerType
+        ));
     }
+
 
     return collectErrors ? {instance, errors} : instance;
 }

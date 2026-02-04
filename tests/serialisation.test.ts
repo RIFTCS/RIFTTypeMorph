@@ -214,7 +214,7 @@ describe("serialise / deserialise (decorator-based schemas)", () => {
             count: 42
         });
 
-        const out = serialiseInstance(inst);
+        const out = serialiseInstance(inst, {flattenExpando: true});
 
         expect(out).toEqual(input);
     });

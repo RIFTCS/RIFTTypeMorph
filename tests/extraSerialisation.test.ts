@@ -42,7 +42,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
         inst.a = 1;
         inst.hidden = "ok";
 
-        const out = serialiseInstance(inst, null, "root", {
+        const out = serialiseInstance(inst,  {
             errorForExtraProps: true
         });
 
@@ -60,7 +60,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
         (inst as any).extra = 123;
 
         expect(() =>
-            serialiseInstance(inst, null, "root", {
+            serialiseInstance(inst,  {
                 errorForExtraProps: true
             })
         ).toThrow(RIFTError);
@@ -97,8 +97,9 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
             "root"
         ) as Model;
 
-        const out = serialiseInstance(inst, null, "root", {
-            errorForExtraProps: true
+        const out = serialiseInstance(inst,  {
+            errorForExtraProps: true,
+            flattenExpando: true
         });
 
         expect(out).toEqual({
@@ -123,7 +124,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
         (inst as any).bad = "nope";
 
         expect(() =>
-            serialiseInstance(inst, null, "root", {
+            serialiseInstance(inst,  {
                 errorForExtraProps: true
             })
         ).toThrow(RIFTError);
@@ -163,7 +164,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
         inst.inner.x = 5;
         inst.inner.secret = "hidden";
 
-        const out = serialiseInstance(inst, null, "root", {
+        const out = serialiseInstance(inst, {
             errorForExtraProps: true
         });
 
@@ -191,7 +192,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
         inst.items = [item];
 
         expect(() =>
-            serialiseInstance(inst, null, "root", {
+            serialiseInstance(inst,  {
                 errorForExtraProps: true
             })
         ).toThrow(RIFTError);
@@ -205,7 +206,7 @@ describe("serialiseInstance - @Ignore and extra prop handling", () => {
 
         const inst = createInstance({}, Model, null, "root") as Model;
 
-        const out = serialiseInstance(inst, null, "root", {
+        const out = serialiseInstance(inst,  {
             errorForExtraProps: true
         });
 

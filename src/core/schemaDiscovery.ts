@@ -43,24 +43,32 @@ export function parseClass(instance: any): ParsedSchema {
     }
 
     // 1. Preferred: decorator metadata
-    if (proto?.__schemaFields) {
-        for (const [key, field] of Object.entries(proto.__schemaFields)) {
-            if (!(field instanceof TSField)) continue;
+    let decoCursor = proto;
+    while (decoCursor && decoCursor !== Object.prototype) {
+        if (decoCursor.__schemaFields) {
+            for (const [key, field] of Object.entries(decoCursor.__schemaFields)) {
+                if (!(field instanceof TSField)) continue;
+                if (fields[key]) continue; // child overrides parent
 
-            materializeSchemaSlot(proto, key, field);
+                // ✅ materialize onto the declaring prototype
+                materializeSchemaSlot(decoCursor, key, field);
 
-            if (field.fieldType === TSType.Expando) {
-                if (expandoKey) {
-                    throw new RIFTError(
-                        "Multiple expando properties were defined! There can be only one."
-                    );
+                if (field.fieldType === TSType.Expando) {
+                    if (expandoKey && expandoKey !== key) {
+                        throw new RIFTError(
+                            "Multiple expando properties were defined! There can be only one."
+                        );
+                    }
+                    expandoKey = key;
+                } else {
+                    fields[key] = field;
                 }
-                expandoKey = key;
-            } else {
-                fields[key] = field;
             }
         }
+
+        decoCursor = Object.getPrototypeOf(decoCursor);
     }
+
 
     // 2. Legacy fallback: TSField directly on prototype or instance
     const legacySources = [proto, instance];

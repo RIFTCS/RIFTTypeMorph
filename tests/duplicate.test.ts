@@ -97,7 +97,7 @@ describe("duplicateInstance", () => {
         const b = duplicateInstance(a);
 
         expect(b).not.toBe(a);
-        expect(serialiseInstance(b)).toEqual({
+        expect(serialiseInstance(b, {flattenExpando: true})).toEqual({
             id: 1,
             foo: "bar",
             baz: 42

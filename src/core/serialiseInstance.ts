@@ -1,14 +1,19 @@
-import {TSType} from "./TSType";
-import {RIFTError} from "../utils/errors";
-import {TSField} from "./TSField";
+import { TSType } from "./TSType";
+import { RIFTError } from "../utils/errors";
+import { TSField } from "./TSField";
+import { parseClass } from "./schemaDiscovery";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
 export interface SerialiseInstanceOptions {
     errorForExtraProps?: boolean;
+    flattenExpando?: boolean;
 }
 
-function findPropertyDescriptor(obj: any, key: string): PropertyDescriptor | undefined {
+function findPropertyDescriptor(
+    obj: any,
+    key: string
+): PropertyDescriptor | undefined {
     let current = obj;
 
     while (current && current !== Object.prototype) {
@@ -20,40 +25,85 @@ function findPropertyDescriptor(obj: any, key: string): PropertyDescriptor | und
     return undefined;
 }
 
-function collectIncludedMethods(obj: any): Set<string> {
-    const result = new Set<string>();
-    let current = Object.getPrototypeOf(obj);
+// ---------- PUBLIC API ----------
+export function serialiseInstance(instance: any): any;
+export function serialiseInstance(
+    instance: any,
+    config: SerialiseInstanceOptions
+): any;
 
-    while (current && current !== Object.prototype) {
-        const methods: Set<string> | undefined = current.__includedMethods;
-        if (methods) {
-            for (const m of methods) {
-                result.add(m);
-            }
-        }
-        current = Object.getPrototypeOf(current);
-    }
-
-    return result;
-}
+// ---------- INTERNAL / RECURSIVE ----------
+export function serialiseInstance(
+    instance: any,
+    field: TSField | null,
+    outerType: string,
+    config?: SerialiseInstanceOptions
+): any;
 
 export function serialiseInstance(
     instance: any,
-    field: TSField | null = null,
+    fieldOrConfig: TSField | SerialiseInstanceOptions | null = null,
     outerType: string = "root",
-    config?: SerialiseInstanceOptions
+    configMaybe?: SerialiseInstanceOptions
 ): any {
+    let field: TSField | null = null;
+    let config: SerialiseInstanceOptions | undefined;
+
+    if (fieldOrConfig instanceof TSField || fieldOrConfig === null) {
+        field = fieldOrConfig;
+        config = configMaybe;
+    } else {
+        field = null;
+        config = fieldOrConfig;
+    }
+
     if (instance === null || instance === undefined) {
         return null;
     }
 
-    // Prefer static serialise(obj) if present
+    // ---- Helper: ensure plain data only
+    const serialiseValue = (value: any, ctx: string): any => {
+        if (value === null || value === undefined) return null;
+
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+
+        const t = typeof value;
+        if (t === "string" || t === "number" || t === "boolean") {
+            return value;
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((v, i) =>
+                serialiseValue(v, `${ctx}[${i}]`)
+            );
+        }
+
+        if (t === "object") {
+            const out: any = {};
+            for (const [k, v] of Object.entries(value)) {
+                out[k] = serialiseValue(v, `${ctx}.${k}`);
+            }
+            return out;
+        }
+
+        throw new RIFTError(
+            `Unsupported value type during serialisation: ${t}`,
+            ctx
+        );
+    };
+
+    // ---- Prefer static serialise(obj) if present
     const ctor: Constructor | undefined = instance?.constructor;
     const ctorAny = ctor as any;
 
     if (ctorAny && typeof ctorAny.serialise === "function") {
         try {
-            return ctorAny.serialise(instance);
+            return serialiseValue(
+                ctorAny.serialise(instance),
+                outerType
+            );
         } catch (e: any) {
             throw new RIFTError(
                 `Error during serialise(): ${e?.message ?? e}`,
@@ -62,41 +112,28 @@ export function serialiseInstance(
         }
     }
 
-    const objInstance: any = instance as object;
+    const objInstance: any = instance;
     const output: Record<string, any> = {};
 
+    // ---- Schema discovery (single source of truth)
+    const {
+        fields: schemaFields,
+        expandoKey,
+        includedKeys
+    } = parseClass(objInstance);
+
     const proto = Object.getPrototypeOf(objInstance);
-
-    const schemaFields: Record<string, TSField> =
-        proto?.__schemaFields ?? {};
-
     const ignoredFields: Set<string> =
         proto?.__ignoredFields ?? new Set<string>();
 
-    const includedMethods = collectIncludedMethods(objInstance);
-
-    // Collect own enumerable props only for extra-prop detection
     const ownKeys = Object.keys(objInstance);
 
-    let expandoKey: string | null = null;
-
-    // --- Schema traversal ---
+    // ---- Schema traversal
     for (const [key, fieldDef] of Object.entries(schemaFields)) {
-        if (ignoredFields.has(key)) {
-            continue;
-        }
-
-        if (!(fieldDef instanceof TSField)) {
-            continue;
-        }
-
-        if (fieldDef.fieldType === TSType.Expando) {
-            expandoKey = key;
-            continue;
-        }
+        if (ignoredFields.has(key)) continue;
 
         const value = objInstance[key];
-        const nestedContextBase = `${outerType}.${key}`;
+        const ctx = `${outerType}.${key}`;
 
         if (value === undefined || value === null) {
             if (fieldDef.required) {
@@ -111,14 +148,14 @@ export function serialiseInstance(
 
         switch (fieldDef.fieldType) {
             case TSType.Value:
-                output[key] = value;
+                output[key] = serialiseValue(value, ctx);
                 break;
 
             case TSType.Object:
                 output[key] = serialiseInstance(
                     value,
                     fieldDef,
-                    nestedContextBase,
+                    ctx,
                     config
                 );
                 break;
@@ -127,7 +164,7 @@ export function serialiseInstance(
                 if (!Array.isArray(value)) {
                     throw new RIFTError(
                         `Invalid type: expected array, got ${typeof value}`,
-                        nestedContextBase
+                        ctx
                     );
                 }
 
@@ -135,7 +172,7 @@ export function serialiseInstance(
                     serialiseInstance(
                         el,
                         fieldDef,
-                        `${nestedContextBase}[${i}]`,
+                        `${ctx}[${i}]`,
                         config
                     )
                 );
@@ -149,33 +186,30 @@ export function serialiseInstance(
         }
     }
 
-    // --- Included method / getter support ---
-    for (const key of includedMethods) {
-        if (ignoredFields.has(key)) {
-            continue;
-        }
+    // ---- Included methods / getters
+    for (const key of includedKeys) {
+        if (ignoredFields.has(key)) continue;
+        if (schemaFields[key]) continue;
+        if (key === expandoKey) continue;
 
         const desc = findPropertyDescriptor(objInstance, key);
-
-        if (!desc) {
-            continue;
-        }
+        if (!desc) continue;
 
         try {
             let value: any;
 
             if (typeof desc.get === "function") {
-                // Getter
                 value = objInstance[key];
-            } else if (typeof objInstance[key] === "function") {
-                // Method
-                value = objInstance[key].call(objInstance);
+            } else if (typeof desc.value === "function") {
+                value = desc.value.call(objInstance);
             } else {
-                // Neither callable nor getter → ignore
                 continue;
             }
 
-            output[key] = value;
+            output[key] = serialiseValue(
+                value,
+                `${outerType}.${key}`
+            );
         } catch (e: any) {
             throw new RIFTError(
                 `Error during @Include execution: ${key}: ${e?.message ?? e}`,
@@ -184,37 +218,34 @@ export function serialiseInstance(
         }
     }
 
-    // --- Expando support ---
+    // ---- Expando
     if (expandoKey) {
         const expandoValue = objInstance[expandoKey];
+
         if (expandoValue && typeof expandoValue === "object") {
-            for (const [k, v] of Object.entries(expandoValue)) {
-                output[k] = v;
+            if (config?.flattenExpando === true) {
+                for (const [k, v] of Object.entries(expandoValue)) {
+                    output[k] = serialiseValue(
+                        v,
+                        `${outerType}.${k}`
+                    );
+                }
+            } else {
+                output[expandoKey] = serialiseValue(
+                    expandoValue,
+                    `${outerType}.${expandoKey}`
+                );
             }
         }
     }
 
-    // --- Extra property detection ---
+    // ---- Extra property detection
     if (config?.errorForExtraProps) {
         for (const key of ownKeys) {
-            if (ignoredFields.has(key)) {
-                continue;
-            }
-
-            if (schemaFields[key] || includedMethods.has(key)) {
-                continue;
-            }
-
-            if (expandoKey) {
-                const expandoValue = objInstance[expandoKey];
-                if (
-                    expandoValue &&
-                    typeof expandoValue === "object" &&
-                    key in expandoValue
-                ) {
-                    continue;
-                }
-            }
+            if (ignoredFields.has(key)) continue;
+            if (schemaFields[key]) continue;
+            if (includedKeys.has(key)) continue;
+            if (key === expandoKey) continue;
 
             throw new RIFTError(
                 `Unexpected extra property during serialisation: ${key}`,
