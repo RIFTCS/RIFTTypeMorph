@@ -37,7 +37,7 @@ export function Field(
         }
         const field = new TSField(type, instantiator ?? null, required, ifEmpty);
         proto.__schemaFields[key] = field;
-        (proto as any)[key] = field;
+        //(proto as any)[key] = field;
       });
       return;
     }
@@ -57,7 +57,7 @@ export function Field(
 
     const field = new TSField(type, instantiator ?? null, required, ifEmpty);
     target.__schemaFields[String(propertyKey)] = field;
-    (target as any)[propertyKey] = field;
+    //(target as any)[propertyKey] = field;
   };
 }
 

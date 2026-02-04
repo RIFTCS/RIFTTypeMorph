@@ -57,15 +57,17 @@ describe("createInstance – Expando behavior (decorator model)", () => {
         expect(inst.extra).toEqual({foo: 1, bar: "yes"});
     });
 
-    it("does NOT materialize expando when there are no extra properties", () => {
+    it("materializes expando as an empty object when there are no extra properties", () => {
         const inst = createInstance(
             {id: "only"},
             WithExpando
         );
 
         expect(inst.id).toBe("only");
-        expect(inst.extra).toBeUndefined();
+        expect(inst.extra).toEqual({});
+        expect(Object.prototype.hasOwnProperty.call(inst, "extra")).toBe(true);
     });
+
 
     it("ignores extra properties when no expando is defined", () => {
         const inst = createInstance(
@@ -83,7 +85,7 @@ describe("createInstance – Expando behavior (decorator model)", () => {
         const inst = createInstance(input, WithExpando);
         const serialized = JSON.parse(JSON.stringify(inst));
 
-        expect(serialized).toStrictEqual(input);
+        expect(serialized).toStrictEqual({id: "abc", extra: {}});
     });
 
     it("round-trips JSON correctly when expando captures extras", () => {
@@ -155,8 +157,8 @@ describe("createInstance – Expando behavior (decorator model)", () => {
             Root
         );
 
-        expect(inst.extra).toEqual({rootExtra: "x"});
-        expect(inst.child.extra).toBeUndefined();
+        expect(inst.extra).toEqual({ rootExtra: "x" });
+        expect(inst.child.extra).toEqual({});
     });
 
     it("throws if multiple expandos are defined in the same schema", () => {

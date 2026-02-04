@@ -2,6 +2,7 @@ import {TSType} from "./TSType";
 import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {shouldBypassConstructor} from "../decorators/rehydrateOptions";
+import {parseClass} from "./schemaDiscovery";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;
@@ -17,8 +18,6 @@ export interface CreateInstanceOptions {
     errorForExtraProps?: boolean;
 }
 
-// Overloads for backwards-compatibility:
-// 1) Default: returns the instance (throws on first error)
 export function createInstance<T = any>(
     data: any,
     instantiator?: Instantiator<T> | null,
@@ -26,17 +25,14 @@ export function createInstance<T = any>(
     outerType?: string
 ): T;
 
-// 2) With options.collectErrors = true: returns { instance, errors }
 export function createInstance<T = any>(
     data: any,
     instantiator: Instantiator<T> | null,
     field: TSField | null,
     outerType: string,
-    options: { collectErrors: true | false }
+    options: CreateInstanceOptions
 ): InstanceResult<T>;
 
-
-// Implementation
 export function createInstance<T = any>(
     data: any,
     instantiator: Instantiator<T> | null = null,
@@ -55,274 +51,178 @@ export function createInstance<T = any>(
         throw err;
     };
 
-    // Guards
-    if (field != null && field.fieldType === TSType.Value) {
+    if (field && field.fieldType === TSType.Value) {
         fail(new RIFTError("createInstance called on a value type", outerType));
-        if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
+        return collectErrors ? {instance: null, errors} : null as any;
     }
 
-    if (field != null && field.instantiator) {
+    if (field?.instantiator) {
         instantiator = field.instantiator as Instantiator<T>;
     }
 
-    if (instantiator == null && field == null) {
-        fail(new RIFTError("Must specify either a field or an instantiator", outerType));
-        if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
-    }
-
-    if (instantiator == null) {
+    if (!instantiator) {
         fail(new RIFTError("Missing instantiator", outerType));
-        if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
+        return collectErrors ? {instance: null, errors} : null as any;
     }
 
-    // Null/undefined handling
     if (data === null || data === undefined) {
         if (field?.required ?? true) {
             fail(new RIFTError("Field value was null but marked as required", outerType));
-            if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
         }
-        return collectErrors
-            ? ({instance: null, errors} as InstanceResult<T>)
-            : (null as any as T);
+        return collectErrors ? {instance: null, errors} : null as any;
     }
 
-    // Instantiate
-    let instance: any = null;
+    let instance: any;
 
     if (typeof instantiator === "function" && (instantiator as any).prototype) {
         const ctor = instantiator as Constructor<T>;
         const ctorAny = ctor as any;
 
-        // Prefer static deserialise(obj) if present
         if (typeof ctorAny.deserialise === "function") {
             try {
                 instance = ctorAny.deserialise(data);
-
-                // IMPORTANT: deserialise is authoritative
-                return collectErrors
-                    ? ({instance, errors} as InstanceResult<T>)
-                    : (instance as T);
-
+                return collectErrors ? {instance, errors} : instance;
             } catch (e: any) {
-                fail(new RIFTError(
-                    `Error during deserialise(): ${e?.message ?? e}`,
-                    outerType
-                ));
-                if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
+                fail(new RIFTError(`Error during deserialise(): ${e?.message ?? e}`, outerType));
+                return collectErrors ? {instance: null, errors} : null as any;
             }
+        }
+
+        if (
+            (options?.bypassConstructor === undefined && shouldBypassConstructor(ctor)) ||
+            options?.bypassConstructor
+        ) {
+            instance = Object.create(ctor.prototype);
         } else {
-            // Existing behavior
-            if (
-                (options?.bypassConstructor === undefined && shouldBypassConstructor(ctor)) ||
-                options?.bypassConstructor
-            ) {
-                instance = Object.create(ctor.prototype);
-            } else {
-                instance = new ctor();
-            }
+            instance = new ctor();
         }
     } else if (typeof instantiator === "function") {
-        instance = (instantiator as (obj: any) => T)(data);
+        // @ts-ignore
+        instance = instantiator(data);
     } else {
         fail(new RIFTError("Invalid instantiator type", outerType));
-        if (collectErrors) return {instance: null, errors} as InstanceResult<T>;
+        return collectErrors ? {instance: null, errors} : null as any;
     }
 
-    const objInstance: any = instance as object;
-
-    // Collect instance and prototype keys (supports decorators)
-    const allKeys = new Set<string>([
-        ...Object.keys(objInstance),
-        ...Object.keys(Object.getPrototypeOf(objInstance) ?? {})
-    ]);
-
+    const {fields, expandoKey, includedKeys} = parseClass(instance);
     const consumedKeys = new Set<string>();
-    let expandoKey: string | null = null;
 
-    for (const key of allKeys) {
-        let fieldDef =
-            (objInstance as any)[key] ?? (Object.getPrototypeOf(objInstance) as any)[key];
+    for (const [key, fieldDef] of Object.entries(fields)) {
+        consumedKeys.add(key);
+        const rawValue = data[key];
+        const nestedContext = `${outerType}.${key}`;
 
-        if (fieldDef.fieldType === TSType.Expando) {
-            if (expandoKey) {
-                fail(new RIFTError(
-                    "Multiple expando properties were defined! There can be only one."
-                ));
-                continue;
-            }
-            expandoKey = key;
-            continue;
-        } else {
-            consumedKeys.add(key);
-        }
-
-        if (!(fieldDef instanceof TSField)) {
-            const proto = Object.getPrototypeOf(objInstance);
-
-            if (proto && proto[key] instanceof TSField) {
-                fieldDef = proto[key];
-            } else if (proto?.__schemaFields && proto.__schemaFields[key] instanceof TSField) {
-                fieldDef = proto.__schemaFields[key];
-            }
-        }
-
-        if (!(fieldDef instanceof TSField)) {
-            fail(new RIFTError(`Field was not configured properly: ${key}`, outerType));
-            continue;
-        }
-
-        const rawValue = (data as any)[key];
-
-        // explicit null handling for instantiateIfNull
         if (rawValue === null && typeof fieldDef.ifEmpty === "function") {
             try {
-                if (collectErrors) {
-                    const res = createInstance(
-                        fieldDef.ifEmpty(),
-                        null,
-                        fieldDef,
-                        `${outerType}.${key}`,
-                        {collectErrors: true}
-                    ) as InstanceResult<any>;
-
-                    (objInstance as any)[key] = res.instance;
-                    if (res.errors.length) errors.push(...res.errors);
-                } else {
-                    (objInstance as any)[key] = createInstance(
-                        fieldDef.ifEmpty(),
-                        null,
-                        fieldDef,
-                        `${outerType}.${key}`
-                    );
-                }
-            } catch (e) {
-                fail(new RIFTError(
-                    `Error during ifEmpty instantiation for field: ${key}`,
-                    outerType
-                ));
-                (objInstance as any)[key] = null;
+                const res = createInstance(
+                    fieldDef.ifEmpty(),
+                    null,
+                    fieldDef,
+                    nestedContext,
+                    {collectErrors: collectErrors}
+                ) as any;
+                instance[key] = collectErrors ? res.instance : res;
+                if (collectErrors && res.errors?.length) errors.push(...res.errors);
+            } catch {
+                fail(new RIFTError(`Error during ifEmpty instantiation for field: ${key}`, outerType));
+                instance[key] = null;
             }
-
             continue;
         }
 
         if (rawValue === undefined) {
+            // Default factory for value types
             if (
                 fieldDef.fieldType === TSType.Value &&
                 typeof fieldDef.instantiator === "function"
             ) {
-                (objInstance as any)[key] = (fieldDef.instantiator as () => any)();
-                continue;
-            }
-
-            if (fieldDef.fieldType === TSType.Object) {
-                if (fieldDef.required) {
-                    fail(new RIFTError(`Missing required property: ${key}`, outerType));
+                try {
+                    instance[key] = (fieldDef.instantiator as () => any)();
+                } catch (e: any) {
+                    fail(
+                        new RIFTError(
+                            `Error during default factory for field: ${key}`,
+                            outerType
+                        )
+                    );
+                    instance[key] = null;
                 }
-                (objInstance as any)[key] = null;
                 continue;
             }
 
             if (fieldDef.required) {
                 fail(new RIFTError(`Missing required property: ${key}`, outerType));
-                (objInstance as any)[key] = null;
-                continue;
             }
 
-            (objInstance as any)[key] = null;
+            instance[key] = null;
             continue;
         }
 
-        const nestedContextBase = `${outerType}.${key}`;
 
         if (fieldDef.fieldType === TSType.Array) {
             if (!Array.isArray(rawValue)) {
-                fail(new RIFTError(
-                    `Invalid type: expected array, got ${typeof rawValue}`,
-                    nestedContextBase
-                ));
-                (objInstance as any)[key] = null;
+                fail(new RIFTError(`Invalid type: expected array`, nestedContext));
+                instance[key] = null;
                 continue;
             }
 
-            const array: any[] = [];
-            for (let i = 0; i < rawValue.length; ++i) {
-                const elementValue = rawValue[i];
-                if (collectErrors) {
-                    const res = createInstance(
-                        elementValue,
-                        null,
-                        fieldDef,
-                        `${nestedContextBase}[${i}]`,
-                        {collectErrors: true}
-                    ) as InstanceResult<any>;
-                    array.push(res.instance);
-                    if (res.errors.length) errors.push(...res.errors);
-                } else {
-                    array.push(
-                        createInstance(
-                            elementValue,
-                            null,
-                            fieldDef,
-                            `${nestedContextBase}[${i}]`
-                        )
-                    );
-                }
-            }
-            (objInstance as any)[key] = array;
+            const arr: any[] = [];
+            rawValue.forEach((v, i) => {
+                const res = createInstance(
+                    v,
+                    null,
+                    fieldDef,
+                    `${nestedContext}[${i}]`,
+                    {collectErrors: collectErrors}
+                ) as any;
+                arr.push(collectErrors ? res.instance : res);
+                if (collectErrors && res.errors?.length) errors.push(...res.errors);
+            });
+            instance[key] = arr;
             continue;
         }
 
         if (fieldDef.fieldType === TSType.Object) {
-            if (collectErrors) {
-                const res = createInstance(
-                    rawValue,
-                    null,
-                    fieldDef,
-                    nestedContextBase,
-                    {collectErrors: true}
-                ) as InstanceResult<any>;
-                (objInstance as any)[key] = res.instance;
-                if (res.errors.length) errors.push(...res.errors);
-            } else {
-                (objInstance as any)[key] = createInstance(
-                    rawValue,
-                    null,
-                    fieldDef,
-                    nestedContextBase
-                );
-            }
+            const res = createInstance(
+                rawValue,
+                null,
+                fieldDef,
+                nestedContext,
+                {collectErrors: collectErrors}
+            ) as any;
+            instance[key] = collectErrors ? res.instance : res;
+            if (collectErrors && res.errors?.length) errors.push(...res.errors);
             continue;
         }
 
         if (fieldDef.fieldType === TSType.Value) {
-            (objInstance as any)[key] = rawValue;
+            instance[key] = rawValue;
             continue;
         }
 
         fail(new RIFTError(`Unknown field type: ${fieldDef.fieldType}`, outerType));
     }
 
-    if (collectErrors) {
-        return {instance, errors} as InstanceResult<T>;
-    }
+    const extraKeys = Object.keys(data ?? {}).filter(k => {
+        if (consumedKeys.has(k)) return false;
 
-    const extraKeys = Object.keys(data ?? {}).filter(
-        (k) => !consumedKeys.has(k)
-    );
-
-    const extraValues =
-        extraKeys.length === 0
-            ? undefined
-            : extraKeys.reduce((acc, k) => {
-                acc[k] = (data as any)[k];
-                return acc;
-            }, {} as Record<string, any>);
+        // Silently ignore input values for @Include methods
+        return !(includedKeys && includedKeys.has(k));
+    });
 
     if (expandoKey) {
-        (objInstance as any)[expandoKey] = extraValues;
+        Object.defineProperty(instance, expandoKey, {
+            value:
+                extraKeys.length === 0
+                    ? {}
+                    : Object.fromEntries(extraKeys.map(k => [k, data[k]])),
+            writable: true,
+            enumerable: true,
+            configurable: true
+        });
+    } else if (options?.errorForExtraProps && extraKeys.length) {
+        fail(new RIFTError(`Unexpected properties: ${extraKeys.join(", ")}`, outerType));
     }
 
-    return instance as T;
+    return collectErrors ? {instance, errors} : instance;
 }
-

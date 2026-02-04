@@ -1,6 +1,6 @@
-import { TSType } from "./TSType";
-import { RIFTError } from "../utils/errors";
-import { TSField } from "./TSField";
+import {TSType} from "./TSType";
+import {RIFTError} from "../utils/errors";
+import {TSField} from "./TSField";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -43,6 +43,9 @@ export function serialiseInstance(
 
     const ignoredFields: Set<string> =
         proto?.__ignoredFields ?? new Set<string>();
+
+    const includedMethods: Set<string> =
+        proto?.__includedMethods ?? new Set<string>();
 
     // Collect own enumerable props only for extra-prop detection
     const ownKeys = Object.keys(objInstance);
@@ -118,6 +121,29 @@ export function serialiseInstance(
         }
     }
 
+    // --- Included method support ---
+    for (const methodName of includedMethods) {
+        if (ignoredFields.has(methodName)) {
+            continue;
+        }
+
+        const fn = objInstance[methodName];
+
+        if (typeof fn !== "function") {
+            continue;
+        }
+
+        try {
+            output[methodName] = fn.call(objInstance);
+        } catch (e: any) {
+            throw new RIFTError(
+                `Error during @Include method execution: ${methodName}: ${e?.message ?? e}`,
+                outerType
+            );
+        }
+    }
+
+
     // --- Expando support ---
     if (expandoKey) {
         const expandoValue = objInstance[expandoKey];
@@ -135,7 +161,7 @@ export function serialiseInstance(
                 continue;
             }
 
-            if (schemaFields[key]) {
+            if (schemaFields[key] || includedMethods.has(key)) {
                 continue;
             }
 
