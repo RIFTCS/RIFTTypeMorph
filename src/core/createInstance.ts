@@ -19,6 +19,20 @@ export interface CreateInstanceOptions {
     errorForNullRequired?: boolean;
 }
 
+function inferInstantiatorFromField<T>(
+    field: TSField | null
+): Constructor<T> | null {
+    if (!field?.instantiator) return null;
+
+    const inst = field.instantiator as any;
+
+    if (typeof inst === "function" && inst.prototype) {
+        return inst as Constructor<T>;
+    }
+
+    return null;
+}
+
 export function createInstance<T = any>(
     data: any,
     instantiator?: Instantiator<T> | null,
@@ -62,9 +76,23 @@ export function createInstance<T = any>(
     }
 
     if (!instantiator) {
-        fail(new RIFTError("Missing instantiator", outerType));
-        return collectErrors ? {instance: null, errors} : null as any;
+        const inferred = inferInstantiatorFromField<T>(field);
+
+        if (
+            inferred &&
+            (
+                options?.bypassConstructor === true ||
+                (options?.bypassConstructor === undefined &&
+                    shouldBypassConstructor(inferred))
+            )
+        ) {
+            instantiator = inferred;
+        } else {
+            fail(new RIFTError("Missing instantiator", outerType));
+            return collectErrors ? {instance: null, errors} : null as any;
+        }
     }
+
 
     if (data === null || data === undefined) {
         if (field?.required ?? true) {
