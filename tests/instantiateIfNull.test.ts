@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createInstance, TSType } from "../src";
 import { RIFTError } from "../src/utils/errors";
-import { Field, OptionalField } from "../src/decorators/schemaDecorator";
+import { Field, OptionalField } from "../src";
 
 /* ---------------------------------------------
  * Test models

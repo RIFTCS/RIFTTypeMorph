@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createInstance, TSField, TSType } from "../src";
 import { RIFTError } from "../src/utils/errors";
 import { single, singleOrNull } from "../src/utils/helpers";
-import { Field } from "../src/decorators/schemaDecorator";
+import { Field } from "../src";
 
 // ------------------------------
 // 1 Basic Example

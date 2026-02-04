@@ -1,6 +1,6 @@
 import { TSType } from "../src";
 import { createInstance } from "../src";
-import { Field } from "../src/decorators/schemaDecorator";
+import { Field } from "../src";
 
 class Address {
   @Field(TSType.Value)

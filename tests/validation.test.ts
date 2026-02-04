@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { TSType } from "../src";
 import { TSField } from "../src";
 import { createInstance } from "../src";
-import { validateInstance } from "../src/core/validateInstance";
+import { validateInstance } from "../src";
 import { RIFTError } from "../src/utils/errors";
 
 describe("validateInstance - multi-error collection", () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Field, getSchemaFields } from "../src/decorators/schemaDecorator";
-import { TSType } from "../src/core/TSType";
-import { TSField } from "../src/core/TSField";
+import { TSType } from "../src";
+import { TSField } from "../src";
 
 describe("Field decorator compatibility", () => {
   it("attaches metadata under legacy decorator semantics", () => {

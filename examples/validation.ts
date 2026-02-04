@@ -1,5 +1,5 @@
 import {TSField, TSType} from "../src";
-import {validateInstance} from "../src/core/validateInstance";
+import {validateInstance} from "../src";
 
 class Product {
   id = new TSField(TSType.Value) as any;

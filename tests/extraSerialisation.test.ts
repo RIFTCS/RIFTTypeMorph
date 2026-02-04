@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { Field, OptionalField, Ignore } from "../src/decorators/schemaDecorator";
-import { TSType } from "../src/core/TSType";
-import { serialiseInstance } from "../src/core/serialiseInstance";
+import { Field, OptionalField, Ignore } from "../src";
+import { TSType } from "../src";
+import { serialiseInstance } from "../src";
 import { createInstance } from "../src";
 import { RIFTError } from "../src/utils/errors";
 

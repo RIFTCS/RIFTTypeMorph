@@ -1,8 +1,8 @@
 import {describe, it, expect} from "vitest";
-import {createInstance} from "../src/core/createInstance";
-import {TSType} from "../src/core/TSType";
-import {Field} from "../src/decorators/schemaDecorator";
-import {BypassConstructor} from "../src/decorators/rehydrateOptions";
+import {createInstance} from "../src";
+import {TSType} from "../src";
+import {Field} from "../src";
+import {BypassConstructor} from "../src";
 import {RIFTError} from "../src/utils/errors";
 import {TSField} from "../src";
 

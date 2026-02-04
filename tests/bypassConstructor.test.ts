@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { createInstance } from "../src/core/createInstance";
-import { TSType } from "../src/core/TSType";
+import { createInstance } from "../src";
+import { TSType } from "../src";
 import { RIFTError } from "../src/utils/errors";
-import {BypassConstructor} from "../src/decorators/rehydrateOptions";
-import {Field} from "../src/decorators/schemaDecorator";
+import {BypassConstructor} from "../src";
+import {Field} from "../src";
 
 /* ------------------------------------------------------------------ */
 /* Test classes (decorator-only schemas)                               */

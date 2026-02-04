@@ -1,8 +1,8 @@
 import {describe, it, expect} from "vitest";
 import {createInstance, TSType} from "../src";
 import {RIFTError} from "../src/utils/errors";
-import {Field, OptionalField} from "../src/decorators/schemaDecorator";
-import {serialiseInstance} from "../src/core/serialiseInstance";
+import {Field, OptionalField} from "../src";
+import {serialiseInstance} from "../src";
 
 /* ---------------------------------------------
  * Test models (decorator-based)
