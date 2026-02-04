@@ -7,3 +7,4 @@ export { serialiseInstance } from "./core/serialiseInstance";
 export { validateInstance } from "./core/validateInstance";
 export { duplicateInstance, cloneWith } from "./core/copyInstance";
 export { Include } from './decorators/serialiseOptions';
+export { parseClass } from './core/schemaDiscovery'
