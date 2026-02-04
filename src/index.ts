@@ -5,3 +5,4 @@ export { BypassConstructor } from "./decorators/rehydrateOptions";
 export { createInstance } from "./core/createInstance";
 export { serialiseInstance } from "./core/serialiseInstance";
 export { validateInstance } from "./core/validateInstance";
+export { duplicateInstance, cloneWith } from "./core/copyInstance";
