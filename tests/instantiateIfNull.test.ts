@@ -81,18 +81,11 @@ describe("ifEmpty (() => any) behavior (decorator-based)", () => {
         expect(inst.child).toBeNull();
     });
 
-    it("does not call ifEmpty when value is undefined (existing behavior unchanged)", () => {
-        const input = {};
-
-        const inst = createInstance(
-            input,
-            ParentUndefinedCase,
-            null,
-            "root"
-        ) as ParentUndefinedCase;
-
-        expect(inst.child).toBeNull();
+    it("calls ifEmpty when value is missing", () => {
+        const inst = createInstance({}, ParentWithIfEmpty);
+        expect(inst.child?.value).toEqual(42);
     });
+
 
     it("calls ifEmpty exactly once for null values", () => {
         let calls = 0;

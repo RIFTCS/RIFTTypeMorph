@@ -86,22 +86,28 @@ describe("createInstance option propagation", () => {
         ).toThrow(RIFTError);
     });
 
-    it("propagates options through ifEmpty recursion", () => {
-        class A {
+    it("does not throw when ifEmpty explicitly handles null, even with errorForNullRequired", () => {
+        class A2 {
             @OptionalField(TSType.Value, null, () => null)
             x!: number;
         }
 
-        expect(() =>
-            createInstance(
-                {x: null},
-                A,
-                null,
-                "root",
-                {errorForNullRequired: true}
-            )
-        ).toThrow(RIFTError);
+        const res = createInstance(
+            { x: null },
+            A2,
+            null,
+            "root",
+            {
+                errorForNullRequired: true,
+                collectErrors: true
+            }
+        );
+
+        expect(res.errors).toHaveLength(0);
+        expect(res.instance!.x).toBeNull();
+
     });
+
 
     it("preserves collectErrors while propagating other options", () => {
         class Inner {
