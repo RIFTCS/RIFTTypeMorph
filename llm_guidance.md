@@ -112,7 +112,7 @@ Behavior:
   errors: RIFTError[]
 }
 ```
-
+ 
 Invariant:
 Errors are never silently ignored.
 Success must be inferred only if errors.length === 0.
