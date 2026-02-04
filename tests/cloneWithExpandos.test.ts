@@ -355,7 +355,6 @@ describe("cloneWith – expando mutation boundaries", () => {
 
         expect(() =>
             cloneWith(c, {
-                // @ts-expect-error
                 _extra: { a: 2 }
             })
         ).toThrow(RIFTError);
