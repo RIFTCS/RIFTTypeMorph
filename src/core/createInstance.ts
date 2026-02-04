@@ -123,8 +123,26 @@ export function createInstance<T = any>(
         ) {
             instance = Object.create(ctor.prototype);
         } else {
-            instance = new ctor();
+            if (ctor.length > 0) {
+                fail(new RIFTError(
+                    `Constructor for ${ctor.name || "anonymous class"} requires arguments and cannot be safely called during hydration. ` +
+                    `Consider using @BypassConstructor() or options.bypassConstructor to avoid invoking the constructor.`,
+                    outerType
+                ));
+                return collectErrors ? {instance: null, errors} : null as any;
+            }
+
+            try {
+                instance = new ctor();
+            } catch (e: any) {
+                fail(new RIFTError(
+                    `Error during construction of ${ctor.name || "anonymous class"}: ${e?.message ?? e}`,
+                    outerType
+                ));
+                return collectErrors ? {instance: null, errors} : null as any;
+            }
         }
+
     } else if (typeof instantiator === "function") {
         try {
             // @ts-ignore
