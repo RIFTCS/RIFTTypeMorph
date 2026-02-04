@@ -241,3 +241,166 @@ describe("@Include decorator (with @Field)", () => {
     });
 
 });
+
+describe("@Include on getters", () => {
+
+    it("includes value returned by a getter", () => {
+        class Example {
+            base = 10;
+
+            @Include
+            get value(): number {
+                return this.base * 2;
+            }
+        }
+
+        const inst = createInstance({}, Example);
+        const json = serialiseInstance(inst);
+
+        expect(json).toEqual({
+            value: 20
+        });
+    });
+
+    it("binds getter to instance correctly", () => {
+        class Example {
+            x = 3;
+            y = 4;
+
+            @Include
+            get sum() {
+                return this.x + this.y;
+            }
+        }
+
+        const inst = createInstance({}, Example);
+        const json = serialiseInstance(inst);
+
+        expect(json.sum).toBe(7);
+    });
+
+    it("allows getter to return null", () => {
+        class Example {
+            @Include
+            get maybe() {
+                return null;
+            }
+        }
+
+        const inst = createInstance({}, Example);
+        const json = serialiseInstance(inst);
+
+        expect(json.maybe).toBeNull();
+    });
+
+    it("does not require a corresponding @Field for getter", () => {
+        class Example {
+            value = 5;
+
+            @Include
+            get doubled() {
+                return this.value * 2;
+            }
+        }
+
+        const inst = createInstance({}, Example);
+        const json = serialiseInstance(inst);
+
+        expect(json.doubled).toBe(10);
+    });
+
+    it("does not treat getter as an enumerable property", () => {
+        class Example {
+            @Include
+            get computed() {
+                return 42;
+            }
+        }
+
+        const inst = createInstance({}, Example);
+
+        expect(
+            Object.prototype.propertyIsEnumerable.call(inst, "computed")
+        ).toBe(false);
+
+        const json = serialiseInstance(inst);
+        expect(json.computed).toBe(42);
+    });
+
+    it("supports included getters on base classes", () => {
+        class Base {
+            @Include
+            get baseValue() {
+                return 1;
+            }
+        }
+
+        class Derived extends Base {
+            @Include
+            get derivedValue() {
+                return 2;
+            }
+        }
+
+        const inst = createInstance({}, Derived);
+        const json = serialiseInstance(inst);
+
+        expect(json).toEqual({
+            baseValue: 1,
+            derivedValue: 2
+        });
+    });
+
+    it("throws RIFTError if included getter throws", () => {
+        class Example {
+            @Include
+            get boom() {
+                throw new Error("explode");
+            }
+        }
+
+        const inst = createInstance({}, Example);
+
+        expect(() => serialiseInstance(inst)).toThrow(RIFTError);
+    });
+
+    it("ignores input values for included getters during createInstance", () => {
+        class Example {
+            @Include
+            get computed() {
+                return 123;
+            }
+        }
+
+        const inst = createInstance(
+            { computed: "IGNORED" },
+            Example
+        );
+
+        const json = serialiseInstance(inst);
+        expect(json.computed).toBe(123);
+    });
+
+    it("does not place included getter input values into expando", () => {
+        class Example {
+            @Field(TSType.Expando)
+            extra!: Record<string, any>;
+
+            @Include
+            get computed() {
+                return "ok";
+            }
+        }
+
+        const inst = createInstance(
+            { computed: "NOPE", other: 1 },
+            Example
+        );
+
+        expect(inst.extra).toEqual({ other: 1 });
+
+        const json = serialiseInstance(inst);
+        expect(json.computed).toBe("ok");
+    });
+
+});

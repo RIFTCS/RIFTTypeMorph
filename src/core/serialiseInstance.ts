@@ -8,6 +8,35 @@ export interface SerialiseInstanceOptions {
     errorForExtraProps?: boolean;
 }
 
+function findPropertyDescriptor(obj: any, key: string): PropertyDescriptor | undefined {
+    let current = obj;
+
+    while (current && current !== Object.prototype) {
+        const desc = Object.getOwnPropertyDescriptor(current, key);
+        if (desc) return desc;
+        current = Object.getPrototypeOf(current);
+    }
+
+    return undefined;
+}
+
+function collectIncludedMethods(obj: any): Set<string> {
+    const result = new Set<string>();
+    let current = Object.getPrototypeOf(obj);
+
+    while (current && current !== Object.prototype) {
+        const methods: Set<string> | undefined = current.__includedMethods;
+        if (methods) {
+            for (const m of methods) {
+                result.add(m);
+            }
+        }
+        current = Object.getPrototypeOf(current);
+    }
+
+    return result;
+}
+
 export function serialiseInstance(
     instance: any,
     field: TSField | null = null,
@@ -44,8 +73,7 @@ export function serialiseInstance(
     const ignoredFields: Set<string> =
         proto?.__ignoredFields ?? new Set<string>();
 
-    const includedMethods: Set<string> =
-        proto?.__includedMethods ?? new Set<string>();
+    const includedMethods = collectIncludedMethods(objInstance);
 
     // Collect own enumerable props only for extra-prop detection
     const ownKeys = Object.keys(objInstance);
@@ -121,28 +149,40 @@ export function serialiseInstance(
         }
     }
 
-    // --- Included method support ---
-    for (const methodName of includedMethods) {
-        if (ignoredFields.has(methodName)) {
+    // --- Included method / getter support ---
+    for (const key of includedMethods) {
+        if (ignoredFields.has(key)) {
             continue;
         }
 
-        const fn = objInstance[methodName];
+        const desc = findPropertyDescriptor(objInstance, key);
 
-        if (typeof fn !== "function") {
+        if (!desc) {
             continue;
         }
 
         try {
-            output[methodName] = fn.call(objInstance);
+            let value: any;
+
+            if (typeof desc.get === "function") {
+                // Getter
+                value = objInstance[key];
+            } else if (typeof objInstance[key] === "function") {
+                // Method
+                value = objInstance[key].call(objInstance);
+            } else {
+                // Neither callable nor getter → ignore
+                continue;
+            }
+
+            output[key] = value;
         } catch (e: any) {
             throw new RIFTError(
-                `Error during @Include method execution: ${methodName}: ${e?.message ?? e}`,
+                `Error during @Include execution: ${key}: ${e?.message ?? e}`,
                 outerType
             );
         }
     }
-
 
     // --- Expando support ---
     if (expandoKey) {

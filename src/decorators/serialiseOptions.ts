@@ -3,8 +3,15 @@ export function Include(
     propertyKey: string,
     descriptor: PropertyDescriptor
 ) {
-    if (typeof descriptor.value !== "function") {
-        throw new Error("@Include can only be applied to methods");
+    const fn =
+        typeof descriptor.value === "function"
+            ? descriptor.value
+            : typeof descriptor.get === "function"
+            ? descriptor.get
+            : null;
+
+    if (!fn) {
+        throw new Error("@Include can only be applied to methods or getters");
     }
 
     const proto = target;

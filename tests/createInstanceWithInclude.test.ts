@@ -27,6 +27,32 @@ describe("createInstance – @Include input handling", () => {
         expect(inst.computed()).toBe("computed");
     });
 
+    it("does not invoke getters during createInstance", () => {
+        let getterCalled = false;
+
+        class Test {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Include
+            get computed() {
+                getterCalled = true;
+                return this.id + 1;
+            }
+        }
+
+        const obj = createInstance(
+            {id: 5},
+            Test,
+            null,
+            "root"
+        );
+
+        expect(getterCalled).toBe(false);
+        expect(obj.id).toBe(5);
+    });
+
+
     it("does not treat @Include keys as extra properties when errorForExtraProps is true", () => {
         class Example {
             @Field(TSType.Value)
@@ -47,7 +73,7 @@ describe("createInstance – @Include input handling", () => {
                 Example,
                 null,
                 "root",
-                { errorForExtraProps: true }
+                {errorForExtraProps: true}
             )
         ).not.toThrow();
     });
@@ -75,7 +101,7 @@ describe("createInstance – @Include input handling", () => {
             Example
         ) as Example;
 
-        expect(inst.extra).toEqual({ other: 99 });
+        expect(inst.extra).toEqual({other: 99});
         expect(inst.computed()).toBe("x");
     });
 
@@ -130,7 +156,7 @@ describe("createInstance – @Include input handling", () => {
                 Example,
                 null,
                 "root",
-                { errorForExtraProps: true }
+                {errorForExtraProps: true}
             )
         ).toThrow(/Unexpected properties/);
     });
