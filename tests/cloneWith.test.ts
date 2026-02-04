@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { RIFTError } from "../src/utils/errors";
+import {describe, it, expect} from "vitest";
+import {RIFTError} from "../src/utils/errors";
 import {cloneWith} from "../src/core/copyInstance";
 import {createInstance, Field, serialiseInstance, TSType} from "../src";
 import {Include} from "../src/decorators/serialiseOptions";
@@ -16,7 +16,7 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const a = new A();
-        const b = cloneWith(a, { x: 10 });
+        const b = cloneWith(a, {x: 10});
 
         expect(b).toBeInstanceOf(A);
         expect(b).not.toBe(a);
@@ -36,7 +36,7 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const c = new Child();
-        const d = cloneWith(c, { childId: 99 });
+        const d = cloneWith(c, {childId: 99});
 
         expect(d).toBeInstanceOf(Child);
         expect(d.baseId).toBe(1);
@@ -53,7 +53,7 @@ describe("cloneWith (schema-derived)", () => {
         a.required = 5;
 
         expect(() =>
-            cloneWith(a, { required: null as any })
+            cloneWith(a, {required: null as any})
         ).toThrow(RIFTError);
     });
 
@@ -66,7 +66,7 @@ describe("cloneWith (schema-derived)", () => {
         const a = new A();
 
         expect(() =>
-            cloneWith(a, { foo: 123 } as any)
+            cloneWith(a, {foo: 123} as any)
         ).toThrow(RIFTError);
     });
 
@@ -84,7 +84,7 @@ describe("cloneWith (schema-derived)", () => {
         const a = new A();
 
         expect(() =>
-            cloneWith(a, { computed: 999 } as any)
+            cloneWith(a, {computed: 999} as any)
         ).toThrow(RIFTError);
     });
 
@@ -100,7 +100,7 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const a = new A();
-        const b = cloneWith(a, { x: 3 });
+        const b = cloneWith(a, {x: 3});
 
         expect("computed" in b).toBe(true);
         expect(serialiseInstance(b)).toEqual({
@@ -119,11 +119,11 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const a = createInstance(
-            { id: 1, foo: "bar", count: 5 },
+            {id: 1, foo: "bar", count: 5},
             A
         );
 
-        const b = cloneWith(a, { id: 2 });
+        const b = cloneWith(a, {id: 2});
 
         expect(serialiseInstance(b, {flattenExpando: true})).toEqual({
             id: 2,
@@ -132,32 +132,13 @@ describe("cloneWith (schema-derived)", () => {
         });
     });
 
-    it("does not allow modifying the expando key directly", () => {
-        class A {
-            @Field(TSType.Value)
-            id = 1;
-
-            @Field(TSType.Expando)
-            extra!: Record<string, any>;
-        }
-
-        const a = createInstance(
-            { id: 1, foo: "bar" },
-            A
-        );
-
-        expect(() =>
-            cloneWith(a, { extra: {} } as any)
-        ).toThrow(RIFTError);
-    });
-
     it("round-trips through custom serialise/deserialise hooks", () => {
         class A {
             @Field(TSType.Value)
             value!: number;
 
             static serialise(obj: A) {
-                return { v: obj.value };
+                return {v: obj.value};
             }
 
             static deserialise(data: any) {
@@ -183,11 +164,11 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const a = createInstance(
-            { nums: [1, 2, 3] },
+            {nums: [1, 2, 3]},
             A
         );
 
-        const b = cloneWith(a, { nums: [4, 5] });
+        const b = cloneWith(a, {nums: [4, 5]});
 
         expect(b.nums).toEqual([4, 5]);
         expect(b.nums).not.toBe(a.nums);
@@ -205,12 +186,12 @@ describe("cloneWith (schema-derived)", () => {
         }
 
         const o = createInstance(
-            { inner: { x: 1 } },
+            {inner: {x: 1}},
             Outer
         );
 
         expect(() =>
-            cloneWith(o, { inner: { x: null } as any })
+            cloneWith(o, {inner: {x: null} as any})
         ).toThrow(RIFTError);
     });
 

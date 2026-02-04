@@ -38,26 +38,26 @@ describe("cloneWith – expando preservation", () => {
         const t = new Task();
         t.id = "1";
         t.title = "A";
-        t._extra = { foo: 1, bar: 2 };
+        t._extra = {foo: 1, bar: 2};
 
         const c = cloneWith(t, {});
 
         expect(c).toBeInstanceOf(Task);
         expect(c.id).toBe("1");
         expect(c.title).toBe("A");
-        expectExpandoEqual(c, { foo: 1, bar: 2 });
+        expectExpandoEqual(c, {foo: 1, bar: 2});
     });
 
     it("preserves expando data when cloning with schema changes", () => {
         const t = new Task();
         t.id = "1";
         t.title = "A";
-        t._extra = { foo: 1 };
+        t._extra = {foo: 1};
 
-        const c = cloneWith(t, { title: "B" });
+        const c = cloneWith(t, {title: "B"});
 
         expect(c.title).toBe("B");
-        expectExpandoEqual(c, { foo: 1 });
+        expectExpandoEqual(c, {foo: 1});
     });
 });
 
@@ -76,22 +76,10 @@ describe("cloneWith – expando immutability", () => {
         _extra!: Record<string, any>;
     }
 
-    it("throws if expando is explicitly modified", () => {
-        const t = new Task();
-        t.id = "1";
-        t._extra = { a: 1 };
-
-        expect(() =>
-            cloneWith(t, {
-                _extra: { a: 2 }
-            })
-        ).toThrow(RIFTError);
-    });
-
     it("throws if expando keys are attempted as top-level changes", () => {
         const t = new Task();
         t.id = "1";
-        t._extra = { foo: 123 };
+        t._extra = {foo: 123};
 
         expect(() =>
             cloneWith(t, {
@@ -114,7 +102,7 @@ describe("cloneWith – custom serialise/deserialise", () => {
         value!: number;
 
         static serialise(obj: A) {
-            return { v: obj.value };
+            return {v: obj.value};
         }
 
         static deserialise(data: any) {
@@ -138,7 +126,7 @@ describe("cloneWith – custom serialise/deserialise", () => {
         const a = new A();
         a.value = 5;
 
-        const b = cloneWith(a, { value: 7 });
+        const b = cloneWith(a, {value: 7});
 
         // serialise => { v: 7 }
         // deserialise => 14
@@ -172,7 +160,7 @@ describe("cloneWith – spread-style update semantics", () => {
         base.id = "t1";
         base.status = "open";
         base.score = 10;
-        base._extra = { derived: false };
+        base._extra = {derived: false};
 
         const updates = {
             status: "done",
@@ -183,7 +171,7 @@ describe("cloneWith – spread-style update semantics", () => {
 
         expect(next.status).toBe("done");
         expect(next.score).toBe(20);
-        expectExpandoEqual(next, { derived: false });
+        expectExpandoEqual(next, {derived: false});
     });
 });
 
@@ -209,7 +197,7 @@ describe("cloneWith – multi-stage pipelines", () => {
         const base = new Task();
         base.id = "x";
         base.cost = 10;
-        base._extra = { cached: true };
+        base._extra = {cached: true};
 
         const candidate = cloneWith(base, {
             cost: 20
@@ -220,7 +208,7 @@ describe("cloneWith – multi-stage pipelines", () => {
         });
 
         expect(recalculated.cost).toBe(30);
-        expectExpandoEqual(recalculated, { cached: true });
+        expectExpandoEqual(recalculated, {cached: true});
     });
 });
 
@@ -272,7 +260,7 @@ describe("cloneWith – custom serialise boundary behavior", () => {
         value!: number;
 
         static serialise(obj: A) {
-            return { v: obj.value };
+            return {v: obj.value};
         }
 
         static deserialise(data: any) {
@@ -286,7 +274,7 @@ describe("cloneWith – custom serialise boundary behavior", () => {
         const a = new A();
         a.value = 3;
 
-        const b = cloneWith(a, { value: 4 });
+        const b = cloneWith(a, {value: 4});
 
         // serialise({ value: 4 }) -> { v: 4 }
         // deserialise -> 8
@@ -348,22 +336,89 @@ describe("cloneWith – expando mutation boundaries", () => {
         _extra!: Record<string, any>;
     }
 
-    it("throws when attempting to replace the expando object", () => {
-        const c = new C();
-        c.id = "x";
-        c._extra = { a: 1 };
+    it("merges expando keys instead of throwing", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1};
+
+        const t2 = cloneWith(t, {
+            _extra: {a: 2}
+        });
+
+        expect(t2._extra).toEqual({a: 2});
+    });
+
+    it("throws if expando is replaced with a non-object", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1};
 
         expect(() =>
-            cloneWith(c, {
-                _extra: { a: 2 }
+            cloneWith(t, {
+                _extra: 2 as any
             })
         ).toThrow(RIFTError);
     });
 
+    it("throws if expando is replaced with null", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1};
+
+        expect(() =>
+            cloneWith(t, {
+                _extra: null as any
+            })
+        ).toThrow(RIFTError);
+    });
+
+    it("deletes expando fields when value is null by default", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1, b: 2};
+
+        const t2 = cloneWith(t, {
+            _extra: {a: null}
+        });
+
+        expect(t2._extra).toEqual({b: 2});
+    });
+
+    it("does not delete expando fields when key is omitted", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1, b: 2};
+
+        const t2 = cloneWith(t, {
+            _extra: {}
+        });
+
+        expect(t2._extra).toEqual({a: 1, b: 2});
+    });
+
+    it("preserves expando keys set to null when removeNullsFromExpando is false", () => {
+        const t = new C();
+        t.id = "1";
+        t._extra = {a: 1, b: 2};
+
+        const t2 = cloneWith(
+            t,
+            {
+                _extra: {a: null}
+            },
+            {
+                removeNullsFromExpando: false
+            }
+        );
+
+        expect(t2._extra).toEqual({a: null, b: 2});
+    });
+
+
     it("throws when attempting to set expando keys directly", () => {
         const c = new C();
         c.id = "x";
-        c._extra = { a: 1 };
+        c._extra = {a: 1};
 
         expect(() =>
             cloneWith(c, {
@@ -376,12 +431,12 @@ describe("cloneWith – expando mutation boundaries", () => {
     it("preserves expando when cloning with schema changes", () => {
         const c = new C();
         c.id = "x";
-        c._extra = { a: 1, b: { nested: true } };
+        c._extra = {a: 1, b: {nested: true}};
 
-        const d = cloneWith(c, { id: "y" });
+        const d = cloneWith(c, {id: "y"});
 
         expect(d.id).toBe("y");
-        expect(d._extra).toEqual({ a: 1, b: { nested: true } });
+        expect(d._extra).toEqual({a: 1, b: {nested: true}});
     });
 });
 
@@ -430,7 +485,7 @@ describe("cloneWith – optional field boundaries", () => {
         e.required = 1;
         e.optional = 2;
 
-        const f = cloneWith(e, { optional: null as any });
+        const f = cloneWith(e, {optional: null as any});
 
         expect(f.optional).toBeNull();
     });
@@ -440,7 +495,7 @@ describe("cloneWith – optional field boundaries", () => {
         e.required = 1;
 
         expect(() =>
-            cloneWith(e, { required: null as any })
+            cloneWith(e, {required: null as any})
         ).toThrow(RIFTError);
     });
 });
@@ -457,7 +512,7 @@ describe("cloneWith – multi-pass safety boundaries", () => {
         count!: number;
 
         static serialise(obj: F) {
-            return { c: obj.count };
+            return {c: obj.count};
         }
 
         static deserialise(data: any) {
@@ -471,8 +526,8 @@ describe("cloneWith – multi-pass safety boundaries", () => {
         const f = new F();
         f.count = 1;
 
-        const a = cloneWith(f, { count: 2 });
-        const b = cloneWith(a, { count: 3 });
+        const a = cloneWith(f, {count: 2});
+        const b = cloneWith(a, {count: 3});
 
         expect(a.count).toBe(2);
         expect(b.count).toBe(3);
@@ -497,14 +552,14 @@ describe("cloneWith – immutability regression", () => {
     it("does not mutate original instance or expando", () => {
         const g = new G();
         g.value = 1;
-        g._extra = { x: 1 };
+        g._extra = {x: 1};
 
-        const h = cloneWith(g, { value: 2 });
+        const h = cloneWith(g, {value: 2});
 
         expect(g.value).toBe(1);
-        expect(g._extra).toEqual({ x: 1 });
+        expect(g._extra).toEqual({x: 1});
 
         expect(h.value).toBe(2);
-        expect(h._extra).toEqual({ x: 1 });
+        expect(h._extra).toEqual({x: 1});
     });
 });

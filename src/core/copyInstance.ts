@@ -22,65 +22,88 @@ export function duplicateInstance<T>(
     ) as T;
 }
 
+export interface CloneWithOptions {
+    removeNullsFromExpando?: boolean;
+}
+
+
 export function cloneWith<T>(
     instance: T,
-    changes: Partial<T>
+    changes: Partial<T>,
+    options: { removeNullsFromExpando?: boolean } = {}
 ): T {
     if (instance === null || instance === undefined) {
         return instance as T;
     }
 
+    const { removeNullsFromExpando = true } = options;
+
     const ctor = (instance as any).constructor;
 
     // Discover schema from the real instance
-    const {fields, expandoKey, includedKeys} = parseClass(instance);
+    const { fields, expandoKey, includedKeys } = parseClass(instance);
 
-    // Full, schema-driven snapshot (includes expando)
+    // Full snapshot of the original instance
     const base = serialiseInstance(instance);
 
     const ctorAny = ctor as any;
     const hasCustomSerialise = typeof ctorAny.serialise === "function";
 
-    let merged: any;
+    // ---- Split changes into schema vs expando
+    const schemaChanges: Record<string, any> = {};
+    let expandoChanges: Record<string, any> | null = null;
 
-    if (hasCustomSerialise && Object.keys(changes).length > 0) {
-        // ---- Apply schema changes at the instance level
-        const interim = duplicateInstance(instance);
-
-        for (const key of Object.keys(changes)) {
-            if (includedKeys.has(key)) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify included field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            if (key === expandoKey) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify expando field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            if (!fields[key]) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify non-schema field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            (interim as any)[key] = (changes as any)[key];
+    for (const key of Object.keys(changes)) {
+        if (includedKeys.has(key)) {
+            throw new RIFTError(
+                `cloneWith: cannot modify included field: ${key}`,
+                "cloneWith"
+            );
         }
 
-        // Re-serialise from updated instance
+        if (key === expandoKey) {
+            const value = (changes as any)[key];
+
+            if (
+                value === null ||
+                value === undefined ||
+                typeof value !== "object" ||
+                Array.isArray(value)
+            ) {
+                throw new RIFTError(
+                    `cloneWith: expando updates must be a plain object`,
+                    "cloneWith"
+                );
+            }
+
+            expandoChanges = value as Record<string, any>;
+            continue;
+        }
+
+        if (!fields[key]) {
+            throw new RIFTError(
+                `cloneWith: cannot modify non-schema field: ${key}`,
+                "cloneWith"
+            );
+        }
+
+        schemaChanges[key] = (changes as any)[key];
+    }
+
+    let merged: any;
+
+    // ---- Apply schema changes
+    if (hasCustomSerialise && Object.keys(schemaChanges).length > 0) {
+        const interim = duplicateInstance(instance);
+
+        for (const [key, value] of Object.entries(schemaChanges)) {
+            (interim as any)[key] = value;
+        }
+
         merged = serialiseInstance(interim);
-
     } else if (hasCustomSerialise) {
-        // No changes → opaque round-trip
-        merged = {...base};
-
+        merged = { ...base };
     } else {
-        // Schema-driven path (no custom serialise)
         merged = {};
 
         for (const key of Object.keys(fields)) {
@@ -93,63 +116,33 @@ export function cloneWith<T>(
             merged[expandoKey] = base[expandoKey];
         }
 
-        // Apply schema changes directly
-        for (const key of Object.keys(changes)) {
-            if (includedKeys.has(key)) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify included field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            if (key === expandoKey) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify expando field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            if (!fields[key]) {
-                throw new RIFTError(
-                    `cloneWith: cannot modify non-schema field: ${key}`,
-                    "cloneWith"
-                );
-            }
-
-            merged[key] = (changes as any)[key];
+        for (const [key, value] of Object.entries(schemaChanges)) {
+            merged[key] = value;
         }
     }
 
+    // ---- Merge expando (merge-only, null-aware semantics)
+    if (expandoKey) {
+        const baseExpando =
+            base[expandoKey] && typeof base[expandoKey] === "object"
+                ? base[expandoKey]
+                : {};
 
-    // ---- Preserve expando wholesale (read-only)
-    if (expandoKey && base[expandoKey] !== undefined) {
-        merged[expandoKey] = base[expandoKey];
-    }
+        if (expandoChanges) {
+            const nextExpando: Record<string, any> = { ...baseExpando };
 
-    // ---- Apply validated changes
-    for (const key of Object.keys(changes)) {
-        if (includedKeys.has(key)) {
-            throw new RIFTError(
-                `cloneWith: cannot modify included field: ${key}`,
-                "cloneWith"
-            );
+            for (const [k, v] of Object.entries(expandoChanges)) {
+                if (v === null && removeNullsFromExpando) {
+                    delete nextExpando[k];
+                } else {
+                    nextExpando[k] = v;
+                }
+            }
+
+            merged[expandoKey] = nextExpando;
+        } else if (base[expandoKey] !== undefined) {
+            merged[expandoKey] = base[expandoKey];
         }
-
-        if (key === expandoKey) {
-            throw new RIFTError(
-                `cloneWith: cannot modify expando field: ${key}`,
-                "cloneWith"
-            );
-        }
-
-        if (!fields[key]) {
-            throw new RIFTError(
-                `cloneWith: cannot modify non-schema field: ${key}`,
-                "cloneWith"
-            );
-        }
-
-        merged[key] = (changes as any)[key];
     }
 
     return createInstance(
@@ -162,3 +155,4 @@ export function cloneWith<T>(
         }
     ) as T;
 }
+
