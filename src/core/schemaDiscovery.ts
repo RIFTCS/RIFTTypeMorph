@@ -8,6 +8,48 @@ export interface ParsedSchema {
     includedKeys: Set<string>;
 }
 
+const parsedCache = new WeakSet<Function>();
+
+export function ensureParsed(target: any) {
+    if (!target) return;
+
+    const ctor =
+        typeof target === "function"
+            ? target
+            : target.constructor;
+
+    if (!ctor || parsedCache.has(ctor)) return;
+
+    // Create a prototype-only instance
+    const protoInstance = Object.create(ctor.prototype);
+
+    parseClass(protoInstance);
+
+    parsedCache.add(ctor);
+}
+
+
+function hasSchemaDecorators(instance: any): boolean {
+    if (!instance || typeof instance !== "object") return false;
+
+    let proto = Object.getPrototypeOf(instance);
+
+    while (proto && proto !== Object.prototype) {
+        if (
+            proto.__schemaFields ||
+            proto.__ignoredFields ||
+            proto.__includedMethods
+        ) {
+            return true;
+        }
+
+        proto = Object.getPrototypeOf(proto);
+    }
+
+    return false;
+}
+
+
 function materializeSchemaSlot(proto: any, key: string, field: TSField) {
     if (Object.prototype.hasOwnProperty.call(proto, key)) return;
 

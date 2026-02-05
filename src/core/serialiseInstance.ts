@@ -1,14 +1,37 @@
-import { TSType } from "./TSType";
-import { RIFTError } from "../utils/errors";
-import { TSField } from "./TSField";
-import { parseClass } from "./schemaDiscovery";
+import {TSType} from "./TSType";
+import {RIFTError} from "../utils/errors";
+import {TSField} from "./TSField";
+import {ensureParsed, parseClass} from "./schemaDiscovery";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
 export interface SerialiseInstanceOptions {
     errorForExtraProps?: boolean;
     flattenExpando?: boolean;
+    /**
+     * If true, plain objects with no schema return {} instead of throwing.
+     * Default: false (throws error)
+     */
+    allowPlainObjectPassthrough?: boolean;
 }
+
+export function hasSchemaDecorators(obj: any): boolean {
+    if (obj === null || obj === undefined) return false;
+    if (typeof obj !== "object") return false;
+
+    const {
+        fields,
+        expandoKey,
+        includedKeys
+    } = parseClass(obj);
+
+    return (
+        Object.keys(fields).length > 0 ||
+        includedKeys.size > 0 ||
+        expandoKey !== null
+    );
+}
+
 
 function findPropertyDescriptor(
     obj: any,
@@ -60,6 +83,9 @@ export function serialiseInstance(
     if (instance === null || instance === undefined) {
         return null;
     }
+
+    // ensure it's been parsed
+    ensureParsed(instance);
 
     // ---- Helper: ensure plain data only
     const serialiseValue = (value: any, ctx: string): any => {
@@ -121,6 +147,60 @@ export function serialiseInstance(
         expandoKey,
         includedKeys
     } = parseClass(objInstance);
+
+    /* ---------- Plain object misuse detection ---------- */
+    const hasDecorators = hasSchemaDecorators(objInstance);
+
+    if (!hasDecorators) {
+        const proto = Object.getPrototypeOf(objInstance);
+        const ownKeys = Object.keys(objInstance);
+
+        const isPlainObject =
+            proto === Object.prototype || proto === null;
+
+        if (isPlainObject && ownKeys.length > 0) {
+            const message =
+                `Attempted to serialise object with no schema decorators at "${outerType}". ` +
+                `Keys detected: [${ownKeys.join(", ")}].`;
+
+            if (config?.allowPlainObjectPassthrough === true) {
+                return {};
+            }
+
+            throw new RIFTError(message, outerType);
+        }
+    }
+
+    if (
+        typeof objInstance === "object" &&
+        objInstance !== null &&
+        !Array.isArray(objInstance) &&
+        !(objInstance instanceof Date)
+    ) {
+        const proto = Object.getPrototypeOf(objInstance);
+        const ownKeys = Object.keys(objInstance);
+
+        const isPlainObject =
+            proto === Object.prototype || proto === null;
+
+        const hasSchema =
+            Object.keys(schemaFields).length > 0 ||
+            includedKeys.size > 0 ||
+            expandoKey !== null;
+
+        if (isPlainObject && !hasSchema && ownKeys.length > 0) {
+            const message =
+                `Attempted to serialise a plain object with no schema at "${outerType}". ` +
+                `Keys detected: [${ownKeys.join(", ")}]. ` +
+                `This usually indicates prototype loss (JSON.parse, spread, clone, etc).`;
+
+            if (config?.allowPlainObjectPassthrough === true) {
+                return {};
+            }
+
+            throw new RIFTError(message, outerType);
+        }
+    }
 
     const proto = Object.getPrototypeOf(objInstance);
     const ignoredFields: Set<string> =
