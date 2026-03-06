@@ -2,6 +2,7 @@ import {createInstance, CreateInstanceOptions} from "./createInstance";
 import {serialiseInstance} from "./serialiseInstance";
 import {RIFTError} from "../utils/errors";
 import {parseClass} from "./schemaDiscovery";
+import {getIgnoredFields} from "../decorators/schemaDecorator";
 
 export function duplicateInstance<T>(
     instance: T,
@@ -13,13 +14,23 @@ export function duplicateInstance<T>(
 
     const ctor = (instance as any).constructor;
 
-    return createInstance(
+    const cloned = createInstance(
         serialiseInstance(instance),
         ctor,
         null,
         "duplicate",
         options ?? {}
     ) as T;
+
+    const ignored = getIgnoredFields(instance);
+
+    for (const [key, meta] of ignored) {
+        if (meta.passThroughOnClone) {
+            (cloned as any)[key] = (instance as any)[key];
+        }
+    }
+
+    return cloned;
 }
 
 export interface CloneWithOptions {
@@ -36,12 +47,12 @@ export function cloneWith<T>(
         return instance as T;
     }
 
-    const { removeNullsFromExpando = true } = options;
+    const {removeNullsFromExpando = true} = options;
 
     const ctor = (instance as any).constructor;
 
     // Discover schema from the real instance
-    const { fields, expandoKey, includedKeys } = parseClass(instance);
+    const {fields, expandoKey, includedKeys} = parseClass(instance);
 
     // Full snapshot of the original instance
     const base = serialiseInstance(instance);
@@ -102,7 +113,7 @@ export function cloneWith<T>(
 
         merged = serialiseInstance(interim);
     } else if (hasCustomSerialise) {
-        merged = { ...base };
+        merged = {...base};
     } else {
         merged = {};
 
@@ -129,7 +140,7 @@ export function cloneWith<T>(
                 : {};
 
         if (expandoChanges) {
-            const nextExpando: Record<string, any> = { ...baseExpando };
+            const nextExpando: Record<string, any> = {...baseExpando};
 
             for (const [k, v] of Object.entries(expandoChanges)) {
                 if (v === null && removeNullsFromExpando) {
@@ -145,7 +156,7 @@ export function cloneWith<T>(
         }
     }
 
-    return createInstance(
+    const cloned = createInstance(
         merged,
         ctor,
         null,
@@ -154,5 +165,15 @@ export function cloneWith<T>(
             errorForNullRequired: true
         }
     ) as T;
+
+    const ignored = getIgnoredFields(instance);
+
+    for (const [key, meta] of ignored) {
+        if (meta.passThroughOnClone) {
+            (cloned as any)[key] = (instance as any)[key];
+        }
+    }
+
+    return cloned;
 }
 

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { RIFTError } from "../src/utils/errors";
-import {createInstance, Field, serialiseInstance, TSType} from "../src";
+import {describe, it, expect} from "vitest";
+import {RIFTError} from "../src/utils/errors";
+import {BypassConstructor, cloneWith, createInstance, Field, Ignore, serialiseInstance, TSType} from "../src";
 import {Include} from "../src/decorators/serialiseOptions";
 import {duplicateInstance} from "../src/core/copyInstance";
 
@@ -90,7 +90,7 @@ describe("duplicateInstance", () => {
         }
 
         const a = createInstance(
-            { id: 1, foo: "bar", baz: 42 },
+            {id: 1, foo: "bar", baz: 42},
             A
         );
 
@@ -110,7 +110,7 @@ describe("duplicateInstance", () => {
             x!: number;
 
             static serialise(obj: A) {
-                return { value: obj.x };
+                return {value: obj.x};
             }
 
             static deserialise(data: any) {
@@ -144,6 +144,166 @@ describe("duplicateInstance", () => {
     it("returns null and undefined as-is", () => {
         expect(duplicateInstance(null as any)).toBeNull();
         expect(duplicateInstance(undefined as any)).toBeUndefined();
+    });
+
+});
+
+describe("duplicateInstance ignore passthrough", () => {
+
+    it("does not serialise ignored fields", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = "state";
+        }
+
+        const a = new A();
+
+        expect(serialiseInstance(a)).toEqual({
+            id: 1
+        });
+    });
+
+    it("preserves ignored fields when passThroughOnClone is true", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = "cache";
+        }
+
+        const a = new A();
+        const b = duplicateInstance(a);
+
+        expect(b.runtime).toBe("cache");
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 1
+        });
+    });
+
+    it("does not preserve ignored fields when passThroughOnClone is false", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore()
+            runtime = "cache";
+        }
+
+        const a = new A();
+        a.runtime = "modified";
+
+        const b = duplicateInstance(a);
+
+        // should NOT copy runtime from original
+        expect(b.runtime).toBe("cache");
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 1
+        });
+    });
+
+    it("cloneWith preserves passThroughOnClone ignored fields", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = "live";
+        }
+
+        const a = new A();
+
+        const b = cloneWith(a, {
+            id: 2
+        });
+
+        expect(b.id).toBe(2);
+        expect(b.runtime).toBe("live");
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 2
+        });
+    });
+
+    it("cloneWith does not copy ignored fields without passthrough", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore()
+            runtime = "live";
+        }
+
+        const a = new A();
+        a.runtime = "changed";
+
+        const b = cloneWith(a, {
+            id: 2
+        });
+
+        // should reset to class default, not copy original
+        expect(b.runtime).toBe("live");
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 2
+        });
+    });
+
+
+});
+
+
+describe("duplicateInstance ignore behaviour with @BypassConstructor", () => {
+
+    it("does not recreate ignored fields when constructor is bypassed", () => {
+        @BypassConstructor()
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore()
+            runtime = "live";
+        }
+
+        const a = new A();
+        a.runtime = "modified";
+
+        const b = duplicateInstance(a);
+
+        // constructor skipped → no initializer → field absent
+        expect(b.runtime).toBeUndefined();
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 1
+        });
+    });
+
+    it("preserves ignored fields with passThroughOnClone when constructor is bypassed", () => {
+        @BypassConstructor()
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = "live";
+        }
+
+        const a = new A();
+        a.runtime = "modified";
+
+        const b = duplicateInstance(a);
+
+        // passthrough should copy value directly
+        expect(b.runtime).toBe("modified");
+
+        expect(serialiseInstance(b)).toEqual({
+            id: 1
+        });
     });
 
 });

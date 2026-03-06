@@ -75,7 +75,12 @@ export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) |
  * @Ignore decorator
  * Marks a property to be skipped during serialisation.
  */
-export function Ignore() {
+/**
+ * @Ignore decorator
+ * Marks a property to be skipped during serialisation.
+ * passThroughOnClone: if true the value is preserved when cloning.
+ */
+export function Ignore(passThroughOnClone: boolean = false) {
   return function (...args: any[]) {
     // --- Modern decorators (TS 5.6+) ---
     if (
@@ -89,13 +94,14 @@ export function Ignore() {
         const proto = Object.getPrototypeOf(this);
         if (!proto.__ignoredFields) {
           Object.defineProperty(proto, "__ignoredFields", {
-            value: new Set<string>(),
+            value: new Map<string, { passThroughOnClone: boolean }>(),
             enumerable: false,
             configurable: false,
             writable: false,
           });
         }
-        proto.__ignoredFields.add(key);
+
+        proto.__ignoredFields.set(key, { passThroughOnClone });
       });
       return;
     }
@@ -106,21 +112,23 @@ export function Ignore() {
 
     if (!target.__ignoredFields) {
       Object.defineProperty(target, "__ignoredFields", {
-        value: new Set<string>(),
+        value: new Map<string, { passThroughOnClone: boolean }>(),
         enumerable: false,
         configurable: false,
         writable: false,
       });
     }
 
-    target.__ignoredFields.add(String(propertyKey));
+    target.__ignoredFields.set(String(propertyKey), { passThroughOnClone });
   };
 }
 
 /** Extracts all @Ignore metadata from a class instance. */
-export function getIgnoredFields(instance: any): Set<string> {
+export function getIgnoredFields(
+  instance: any
+): Map<string, { passThroughOnClone: boolean }> {
   const proto = Object.getPrototypeOf(instance);
-  return proto?.__ignoredFields ?? new Set();
+  return proto?.__ignoredFields ?? new Map();
 }
 
 /** Extracts all @Field metadata from a class instance. */
