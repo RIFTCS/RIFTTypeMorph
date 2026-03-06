@@ -1,8 +1,15 @@
-import {Constructor, TSField} from "../core/TSField";
+import { Constructor, TSField } from "../core/TSField";
 import { RIFTError } from "../utils/errors";
 
-type CustomSerialiseFn<T> = (data: T) => any;
-type CustomDeserialiseFn<T> = (data: any) => T;
+/*
+Transport-layer serializer functions.
+
+They operate on the output of serialiseInstance,
+NOT on runtime class instances.
+*/
+
+type CustomSerialiseFn = (data: any) => any;
+type CustomDeserialiseFn = (data: any) => any;
 
 type SerialisedTypeFor<T> =
     T extends string ? "string" :
@@ -35,13 +42,13 @@ export function matchesSerialisedType(value: any, type: string): boolean {
     }
 }
 
-export interface CustomSerialiser<T = any> {
-    serialise: CustomSerialiseFn<T>;
-    deserialise: CustomDeserialiseFn<T>;
+export interface CustomSerialiser {
+    serialise: CustomSerialiseFn;
+    deserialise: CustomDeserialiseFn;
 }
 
-export interface CustomSerialiserMeta<T = any> {
-    serialiser: CustomSerialiser<T>;
+export interface CustomSerialiserMeta {
+    serialiser: CustomSerialiser;
     serialisedType: string;
     handlesNull?: boolean;
 }
@@ -56,9 +63,13 @@ function resolveTypeString(type: Constructor<any> | string): string {
     return type.name;
 }
 
-export function CustomSerialise<T, S>(
-    serialise: (data: T) => S,
-    deserialise: (data: S) => T,
+/*
+Decorator
+*/
+
+export function CustomSerialise<T = any, S = any>(
+    serialise: (data: any) => any,
+    deserialise: (data: any) => any,
     serialisedType: SerialisedTypeFor<S>,
     handlesNull: boolean = false
 ) {
@@ -66,7 +77,7 @@ export function CustomSerialise<T, S>(
 
         const typeString = resolveTypeString(serialisedType as any);
 
-        const meta: CustomSerialiserMeta<T> = {
+        const meta: CustomSerialiserMeta = {
             serialiser: {
                 serialise,
                 deserialise
@@ -75,7 +86,10 @@ export function CustomSerialise<T, S>(
             handlesNull
         };
 
-        // ---- Modern decorators
+        /*
+        Modern decorator support
+        */
+
         if (
             args.length >= 1 &&
             args.some(a => a && typeof a === "object" && "kind" in a)
@@ -96,14 +110,12 @@ export function CustomSerialise<T, S>(
 
                 const proto = Object.getPrototypeOf(this);
 
-                // Field already exists
                 const field = proto?.__schemaFields?.[key];
                 if (field) {
                     field.customSerialiser = meta;
                     return;
                 }
 
-                // Field not yet created — store pending
                 if (!proto.__pendingCustomSerialisers) {
                     Object.defineProperty(proto, "__pendingCustomSerialisers", {
                         value: {},
@@ -119,7 +131,10 @@ export function CustomSerialise<T, S>(
             return;
         }
 
-        // ---- Legacy decorators
+        /*
+        Legacy decorator support
+        */
+
         const [target, propertyKey] = args;
 
         if (!target) return;
@@ -133,7 +148,6 @@ export function CustomSerialise<T, S>(
             return;
         }
 
-        // Field not defined yet
         if (!target.__pendingCustomSerialisers) {
             Object.defineProperty(target, "__pendingCustomSerialisers", {
                 value: {},
@@ -146,6 +160,13 @@ export function CustomSerialise<T, S>(
         target.__pendingCustomSerialisers[key] = meta;
     };
 }
+
+/*
+Custom deserialisation pass
+
+Runs BEFORE createInstance hydration.
+Mutates the transport object directly.
+*/
 
 export function customDeserialisePass(
     input: any,
@@ -164,7 +185,11 @@ export function customDeserialisePass(
 
         const rawValue = input[key];
 
-        if (rawValue === null || rawValue === undefined) continue;
+        if (rawValue === undefined) continue;
+
+        if ((rawValue === null) && custom.handlesNull !== true) {
+            continue;
+        }
 
         try {
             input[key] = custom.serialiser.deserialise(rawValue);
@@ -177,9 +202,16 @@ export function customDeserialisePass(
     }
 }
 
+/*
+Serialisation pass helper.
+
+serialiseInstance should collect the normal output first,
+then this runs as a final transform stage.
+*/
+
 export function runFieldCustomSerialiser(
     key: string,
-    fieldDef: any,
+    fieldDef: TSField,
     objInstance: any,
     output: any,
     outerType: string
@@ -188,9 +220,8 @@ export function runFieldCustomSerialiser(
     const custom = fieldDef?.customSerialiser;
     if (!custom) return false;
 
-    const value = objInstance[key];
+    const value = output[key];
 
-    // Framework default null semantics unless serializer opts in
     if ((value === null || value === undefined) && custom.handlesNull !== true) {
         output[key] = null;
         return true;
@@ -218,5 +249,6 @@ export function runFieldCustomSerialiser(
     }
 
     output[key] = transformed;
+
     return true;
 }

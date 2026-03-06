@@ -35,6 +35,35 @@ function inferInstantiatorFromField<T>(
     return null;
 }
 
+function coerceValue(inst: any, rawValue: any): any {
+
+    if (inst === Number) {
+        return Number(rawValue);
+    }
+
+    if (inst === String) {
+        return String(rawValue);
+    }
+
+    if (inst === Boolean) {
+        return Boolean(rawValue);
+    }
+
+    if (inst === Date) {
+        return new Date(rawValue);
+    }
+
+    if (typeof inst === "function" && inst.prototype) {
+        return new inst(rawValue);
+    }
+
+    if (typeof inst === "function") {
+        return inst(rawValue);
+    }
+
+    return rawValue;
+}
+
 export function createInstance<T = any>(
     data: any,
     instantiator: Instantiator<T>,
@@ -189,7 +218,7 @@ export function createInstance<T = any>(
     const {fields, expandoKey, includedKeys} = parseClass(instance);
     const consumedKeys = new Set<string>();
 
-    // ---- Do custom deserialisers inplace -----
+    // ---- Custom deserialisation pass (before hydration)
     customDeserialisePass(data, fields, outerType);
 
     for (const [key, fieldDef] of Object.entries(fields)) {
@@ -197,34 +226,6 @@ export function createInstance<T = any>(
 
         const rawValue = data[key];
         const nestedContext = `${outerType}.${key}`;
-
-        // Custom serializer already transformed this field
-// Custom deserialiser already transformed transport value
-        if (fieldDef.customSerialiser) {
-
-            if (fieldDef.fieldType === TSType.Object) {
-
-                const res = createInstance(
-                    rawValue,
-                    null,
-                    fieldDef,
-                    nestedContext,
-                    options ?? {}
-                ) as any;
-
-                instance[key] = collectErrors ? res.instance : res;
-
-                if (collectErrors && res.errors?.length) {
-                    errors.push(...res.errors);
-                }
-
-            } else {
-                // Value / Array already final
-                instance[key] = rawValue;
-            }
-
-            continue;
-        }
 
         // ---- Unified empty handling (undefined + optional null)
         if (isEmpty(rawValue)) {
@@ -343,16 +344,7 @@ export function createInstance<T = any>(
             const inst = fieldDef.instantiator as any;
 
             try {
-                if (typeof inst === "function" && inst.prototype) {
-                    // Constructor coercion (Date, BigInt, etc.)
-                    instance[key] = new inst(rawValue);
-                } else if (typeof inst === "function") {
-                    // Functional coercion
-                    instance[key] = inst(rawValue);
-                } else {
-                    // Plain assignment
-                    instance[key] = rawValue;
-                }
+                instance[key] = coerceValue(inst, rawValue);
             } catch (e: any) {
                 fail(new RIFTError(
                     `Error during value instantiation for field: ${key}: ${e?.message ?? e}`,
