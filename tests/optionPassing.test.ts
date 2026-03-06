@@ -103,7 +103,10 @@ describe("createInstance option propagation", () => {
             }
         );
 
+        // @ts-ignore
         expect(res.errors).toHaveLength(0);
+
+        // @ts-ignore
         expect(res.instance!.x).toBeNull();
 
     });

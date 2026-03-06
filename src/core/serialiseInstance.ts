@@ -2,6 +2,7 @@ import {TSType} from "./TSType";
 import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {ensureParsed, parseClass} from "./schemaDiscovery";
+import {runFieldCustomSerialiser, matchesSerialisedType} from "../decorators/customSerialiser";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -69,6 +70,8 @@ export function serialiseInstance(
     outerType: string = "root",
     configMaybe?: SerialiseInstanceOptions
 ): any {
+    const customSerialised = new Set<string>();
+
     let field: TSField | null = null;
     let config: SerialiseInstanceOptions | undefined;
 
@@ -86,6 +89,7 @@ export function serialiseInstance(
 
     // ensure it's been parsed
     ensureParsed(instance);
+
 
     // ---- Helper: ensure plain data only
     const serialiseValue = (value: any, ctx: string): any => {
@@ -148,6 +152,19 @@ export function serialiseInstance(
         includedKeys
     } = parseClass(objInstance);
 
+    const proto = Object.getPrototypeOf(objInstance);
+    const ignoredFields: Set<string> = proto?.__ignoredFields ?? new Set<string>();
+
+    // ---- Run custom serializers first
+    for (const [key, fieldDef] of Object.entries(schemaFields)) {
+
+        if (ignoredFields.has(key)) continue;
+
+        if(runFieldCustomSerialiser(key, fieldDef, objInstance, output, outerType)){
+            customSerialised.add(key);
+        }
+    }
+
     /* ---------- Plain object misuse detection ---------- */
     const hasDecorators = hasSchemaDecorators(objInstance);
 
@@ -202,14 +219,12 @@ export function serialiseInstance(
         }
     }
 
-    const proto = Object.getPrototypeOf(objInstance);
-    const ignoredFields: Set<string> =
-        proto?.__ignoredFields ?? new Set<string>();
-
     const ownKeys = Object.keys(objInstance);
 
     // ---- Schema traversal
     for (const [key, fieldDef] of Object.entries(schemaFields)) {
+
+        if (customSerialised.has(key)) continue;
         if (ignoredFields.has(key)) continue;
 
         const value = objInstance[key];
@@ -333,6 +348,7 @@ export function serialiseInstance(
             );
         }
     }
+
 
     return output;
 }

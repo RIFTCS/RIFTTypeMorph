@@ -111,6 +111,28 @@ export function parseClass(instance: any): ParsedSchema {
         decoCursor = Object.getPrototypeOf(decoCursor);
     }
 
+    // Apply pending custom serializers (decorator ordering safety)
+    let pendingCursor = proto;
+
+    while (pendingCursor && pendingCursor !== Object.prototype) {
+
+        const pending = pendingCursor.__pendingCustomSerialisers;
+
+        if (pending) {
+            for (const [key, meta] of Object.entries(pending)) {
+
+                const field = fields[key];
+
+                if (field && !field.customSerialiser) {
+                    field.customSerialiser = meta as any;
+                }
+
+            }
+        }
+
+        pendingCursor = Object.getPrototypeOf(pendingCursor);
+    }
+
 
     // 2. Legacy fallback: TSField directly on prototype or instance
     const legacySources = [proto, instance];

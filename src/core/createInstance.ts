@@ -3,6 +3,7 @@ import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {shouldBypassConstructor} from "../decorators/rehydrateOptions";
 import {parseClass} from "./schemaDiscovery";
+import {customDeserialisePass} from "../decorators/customSerialiser";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;
@@ -188,11 +189,42 @@ export function createInstance<T = any>(
     const {fields, expandoKey, includedKeys} = parseClass(instance);
     const consumedKeys = new Set<string>();
 
+    // ---- Do custom deserialisers inplace -----
+    customDeserialisePass(data, fields, outerType);
+
     for (const [key, fieldDef] of Object.entries(fields)) {
         consumedKeys.add(key);
 
         const rawValue = data[key];
         const nestedContext = `${outerType}.${key}`;
+
+        // Custom serializer already transformed this field
+// Custom deserialiser already transformed transport value
+        if (fieldDef.customSerialiser) {
+
+            if (fieldDef.fieldType === TSType.Object) {
+
+                const res = createInstance(
+                    rawValue,
+                    null,
+                    fieldDef,
+                    nestedContext,
+                    options ?? {}
+                ) as any;
+
+                instance[key] = collectErrors ? res.instance : res;
+
+                if (collectErrors && res.errors?.length) {
+                    errors.push(...res.errors);
+                }
+
+            } else {
+                // Value / Array already final
+                instance[key] = rawValue;
+            }
+
+            continue;
+        }
 
         // ---- Unified empty handling (undefined + optional null)
         if (isEmpty(rawValue)) {

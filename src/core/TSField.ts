@@ -1,4 +1,5 @@
 import {TSType} from "./TSType";
+import {CustomSerialiserMeta} from "../decorators/customSerialiser";
 
 /**
  * Generic type for a class constructor.
@@ -17,6 +18,9 @@ export class TSField {
 
   /** The type of field — Value, Array, or Object. */
   public fieldType: TSType;
+
+  /** If the serialiser is custom */
+    customSerialiser?: CustomSerialiserMeta;
 
   /**
    * Function or class constructor used to create instances.
