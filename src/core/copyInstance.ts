@@ -4,6 +4,37 @@ import {RIFTError} from "../utils/errors";
 import {parseClass} from "./schemaDiscovery";
 import {getIgnoredFields} from "../decorators/schemaDecorator";
 
+function applyIgnoredPassthrough(source: any, target: any): void {
+    if (!source || !target) return;
+
+    if (typeof source !== "object" || typeof target !== "object") {
+        return;
+    }
+
+    const ignored = getIgnoredFields(source);
+
+    for (const [key, meta] of ignored) {
+        if (meta.passThroughOnClone) {
+            target[key] = source[key];
+        }
+    }
+
+    for (const key of Object.keys(source)) {
+        const s = source[key];
+        const t = target[key];
+
+        if (!s || !t) continue;
+
+        if (Array.isArray(s) && Array.isArray(t)) {
+            for (let i = 0; i < s.length; i++) {
+                applyIgnoredPassthrough(s[i], t[i]);
+            }
+        } else if (typeof s === "object" && typeof t === "object") {
+            applyIgnoredPassthrough(s, t);
+        }
+    }
+}
+
 export function duplicateInstance<T>(
     instance: T,
     options?: CreateInstanceOptions
@@ -22,13 +53,7 @@ export function duplicateInstance<T>(
         options ?? {}
     ) as T;
 
-    const ignored = getIgnoredFields(instance);
-
-    for (const [key, meta] of ignored) {
-        if (meta.passThroughOnClone) {
-            (cloned as any)[key] = (instance as any)[key];
-        }
-    }
+    applyIgnoredPassthrough(instance, cloned);
 
     return cloned;
 }
@@ -166,13 +191,7 @@ export function cloneWith<T>(
         }
     ) as T;
 
-    const ignored = getIgnoredFields(instance);
-
-    for (const [key, meta] of ignored) {
-        if (meta.passThroughOnClone) {
-            (cloned as any)[key] = (instance as any)[key];
-        }
-    }
+    applyIgnoredPassthrough(instance, cloned);
 
     return cloned;
 }

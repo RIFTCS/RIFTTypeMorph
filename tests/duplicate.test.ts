@@ -307,3 +307,156 @@ describe("duplicateInstance ignore behaviour with @BypassConstructor", () => {
     });
 
 });
+
+
+describe("runtime passthrough behaviour for @Ignore(true)", () => {
+
+    it("preserves ignored runtime fields when duplicating a @BypassConstructor class", () => {
+        @BypassConstructor()
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime!: { name: string };
+        }
+
+        const a = new A();
+        a.runtime = { name: "live-runtime" };
+
+        const b = duplicateInstance(a);
+
+        expect(b).not.toBe(a);
+        expect(b.runtime).toBe(a.runtime);
+    });
+
+    it("preserves ignored runtime fields when cloneWith is used on @BypassConstructor classes", () => {
+        @BypassConstructor()
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime!: { value: number };
+        }
+
+        const a = new A();
+        a.runtime = { value: 42 };
+
+        const b = cloneWith(a, { id: 2 });
+
+        expect(b.id).toBe(2);
+        expect(b.runtime).toBe(a.runtime);
+    });
+
+    it("preserves ignored runtime fields inside nested structures during duplicateInstance", () => {
+        @BypassConstructor()
+        class Child {
+            @Field(TSType.Value)
+            name = "child";
+
+            @Ignore(true)
+            runtime!: string;
+        }
+
+        class Parent {
+            @Field(TSType.Array, Child)
+            children: Child[] = [];
+        }
+
+        const child = new Child();
+        child.runtime = "live";
+
+        const parent = new Parent();
+        parent.children = [child];
+
+        const dup = duplicateInstance(parent);
+
+        expect(dup.children[0].runtime).toBe("live");
+    });
+
+    it("ignored runtime fields pass through clone but are excluded from serialisation", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = "cache";
+        }
+
+        const a = new A();
+
+        const b = duplicateInstance(a);
+
+        expect(b.runtime).toBe("cache");
+
+        const json = serialiseInstance(b);
+
+        expect(json).toEqual({
+            id: 1
+        });
+    });
+
+    it("preserves reference identity of passthrough ignored fields", () => {
+        class RuntimeObj {
+            name = "calendar";
+        }
+
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime!: RuntimeObj;
+        }
+
+        const runtime = new RuntimeObj();
+
+        const a = new A();
+        a.runtime = runtime;
+
+        const b = duplicateInstance(a);
+
+        expect(b.runtime).toBe(runtime);
+    });
+
+    it("preserves runtime fields for schedule-style objects with @BypassConstructor", () => {
+        class Calendar {
+            name = "default";
+        }
+
+        @BypassConstructor()
+        class Schedule {
+            @Field(TSType.Value)
+            tasks: number[] = [];
+
+            @Ignore(true)
+            calendar!: Calendar;
+        }
+
+        const s = new Schedule();
+        s.tasks = [1, 2, 3];
+        s.calendar = new Calendar();
+
+        const clone = duplicateInstance(s);
+
+        expect(clone.calendar).toBe(s.calendar);
+    });
+
+    it("does not deep clone passthrough runtime fields", () => {
+        class A {
+            @Field(TSType.Value)
+            id = 1;
+
+            @Ignore(true)
+            runtime = { value: 5 };
+        }
+
+        const a = new A();
+
+        const b = cloneWith(a, { id: 2 });
+
+        expect(b.runtime).toBe(a.runtime);
+    });
+
+});
