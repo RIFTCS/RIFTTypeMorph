@@ -40,8 +40,6 @@ export function duplicateInstance<T>(
     options?: CreateInstanceOptions
 ): T {
 
-    console.info("WE ARE RUNNING THE MOST RECENT VERSION OF duplicateInstance");
-
     if (instance === null || instance === undefined) {
         return instance as T;
     }
