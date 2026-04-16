@@ -82,8 +82,6 @@ export function OptionalField(type: TSType, instantiator?: ((obj: any) => any) |
  */
 export function Ignore(passThroughOnClone: boolean = false) {
   return function (...args: any[]) {
-      console.info("WE ARE RUNNING THE MOST RECENT VERSION OF Ignore");
-
     // --- Modern decorators (TS 5.6+) ---
     if (
       args.length >= 1 &&
