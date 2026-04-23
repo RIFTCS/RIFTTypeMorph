@@ -3,6 +3,7 @@ import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {ensureParsed, parseClass} from "./schemaDiscovery";
 import {runFieldCustomSerialiser} from "../decorators/customSerialiser";
+import {isTypeMorphSerialisableCtor} from "./classCustomSerialiser";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -91,6 +92,22 @@ export function serialiseInstance(
     // ---- Helper: ensure plain data only
     const serialiseValue = (value: any, ctx: string): any => {
         if (value === null || value === undefined) return null;
+
+        const ctor = value?.constructor;
+
+        if (isTypeMorphSerialisableCtor(ctor)) {
+            try {
+                return serialiseValue(
+                    ctor.serialise(value),
+                    ctx
+                );
+            } catch (e: any) {
+                throw new RIFTError(
+                    `Error during serialise(): ${e?.message ?? e}`,
+                    ctx
+                );
+            }
+        }
 
         if (value instanceof Date) {
             return value.toISOString();

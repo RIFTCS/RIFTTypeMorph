@@ -4,6 +4,7 @@ import {TSField} from "./TSField";
 import {shouldBypassConstructor} from "../decorators/rehydrateOptions";
 import {parseClass} from "./schemaDiscovery";
 import {customDeserialisePass} from "../decorators/customSerialiser";
+import {isTypeMorphSerialisableCtor} from "./classCustomSerialiser"
 
 type Constructor<T = any> = new (...args: any[]) => T;
 type Instantiator<T = any> = ((obj: any) => T) | Constructor<T> | null;
@@ -36,7 +37,6 @@ function inferInstantiatorFromField<T>(
 }
 
 function coerceValue(inst: any, rawValue: any): any {
-
     if (inst === Number) {
         return Number(rawValue);
     }
@@ -51,6 +51,10 @@ function coerceValue(inst: any, rawValue: any): any {
 
     if (inst === Date) {
         return new Date(rawValue);
+    }
+
+    if (isTypeMorphSerialisableCtor(inst)) {
+        return inst.deserialise(rawValue);
     }
 
     if (typeof inst === "function" && inst.prototype) {

@@ -20,7 +20,7 @@ export class TSField {
   public fieldType: TSType;
 
   /** If the serialiser is custom */
-    customSerialiser?: CustomSerialiserMeta;
+  customSerialiser?: CustomSerialiserMeta;
 
   /**
    * Function or class constructor used to create instances.
