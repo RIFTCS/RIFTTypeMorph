@@ -351,7 +351,7 @@ export function createInstance<T = any>(
                 instance[key] = coerceValue(inst, rawValue);
             } catch (e: any) {
                 fail(new RIFTError(
-                    `Error during value instantiation for field: ${key}: ${e?.message ?? e}`,
+                    `Error during value instantiation for field: ${key}: ${e?.message ?? e} | raw value = ${rawValue}`,
                     nestedContext
                 ));
                 instance[key] = null;
