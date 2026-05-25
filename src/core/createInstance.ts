@@ -225,6 +225,48 @@ export function createInstance<T = any>(
     // ---- Custom deserialisation pass (before hydration)
     customDeserialisePass(data, fields, outerType);
 
+    const hydrateArrayField = (
+        rawArray: any,
+        fieldDef: TSField,
+        nestedContext: string
+    ): any[] | null => {
+        if (!Array.isArray(rawArray)) {
+            fail(new RIFTError(`Invalid type: expected array`, nestedContext));
+            return null;
+        }
+
+        const arr = new Array(rawArray.length);
+
+        for (let i = 0; i < rawArray.length; i++) {
+            if (!(i in rawArray)) {
+                arr[i] = undefined;
+                continue;
+            }
+
+            const elementField = new TSField(
+                TSType.Object,
+                fieldDef.instantiator ?? null,
+                fieldDef.required
+            );
+
+            const res = createInstance(
+                rawArray[i],
+                null,
+                elementField,
+                `${nestedContext}[${i}]`,
+                options ?? {}
+            ) as any;
+
+            arr[i] = collectErrors ? res.instance : res;
+
+            if (collectErrors && res.errors?.length) {
+                errors.push(...res.errors);
+            }
+        }
+
+        return arr;
+    };
+
     for (const [key, fieldDef] of Object.entries(fields)) {
         consumedKeys.add(key);
 
@@ -235,11 +277,19 @@ export function createInstance<T = any>(
         if (isEmpty(rawValue)) {
             if (typeof fieldDef.ifEmpty === "function") {
                 try {
+                    const defaultValue = fieldDef.ifEmpty();
+
                     if (fieldDef.fieldType === TSType.Value) {
-                        instance[key] = fieldDef.ifEmpty();
+                        instance[key] = defaultValue;
+                    } else if (fieldDef.fieldType === TSType.Array) {
+                        instance[key] = hydrateArrayField(
+                            defaultValue,
+                            fieldDef,
+                            nestedContext
+                        );
                     } else {
                         const res = createInstance(
-                            fieldDef.ifEmpty(),
+                            defaultValue,
                             null,
                             fieldDef,
                             nestedContext,
@@ -286,43 +336,11 @@ export function createInstance<T = any>(
 
         // ---- Array
         if (fieldDef.fieldType === TSType.Array) {
-            if (!Array.isArray(rawValue)) {
-                fail(new RIFTError(`Invalid type: expected array`, nestedContext));
-                instance[key] = null;
-                continue;
-            }
-
-            const arr = new Array(rawValue.length);
-
-            for (let i = 0; i < rawValue.length; i++) {
-                if (!(i in rawValue)) {
-                    arr[i] = undefined;
-                    continue;
-                }
-
-                const elementField = new TSField(
-                    fieldDef.fieldType ?? TSType.Object,
-                    fieldDef.instantiator ?? null,
-                    fieldDef.required
-                );
-
-                const res = createInstance(
-                    rawValue[i],
-                    null,
-                    elementField,
-                    `${nestedContext}[${i}]`,
-                    options ?? {}
-                );
-
-
-                arr[i] = collectErrors ? res.instance : res;
-
-                if (collectErrors && res.errors?.length) {
-                    errors.push(...res.errors);
-                }
-            }
-
-            instance[key] = arr;
+            instance[key] = hydrateArrayField(
+                rawValue,
+                fieldDef,
+                nestedContext
+            );
             continue;
         }
 

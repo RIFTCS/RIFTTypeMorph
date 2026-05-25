@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createInstance } from "../src";
+import {createInstance, Field, OptionalField} from "../src";
 import { TSField } from "../src";
 import { TSType } from "../src";
 import { RIFTError } from "../src/utils/errors";
@@ -57,5 +57,46 @@ describe("createInstance - non-required and required field behavior", () => {
       optionalObject: "notAnObject"
     };
     expect(() => createInstance(data, OptionalExample)).toThrow(RIFTError);
+  });
+
+  class Resource {
+    @Field(TSType.Value)
+    id!: string;
+  }
+
+  class OptionalArrayDefaultExample {
+    @OptionalField(TSType.Array, Resource, () => [])
+    resources!: Resource[];
+  }
+
+  it("default-initialises a missing optional decorated array to an empty array", () => {
+    const instance = createInstance({}, OptionalArrayDefaultExample);
+
+    expect(instance.resources).toEqual([]);
+  });
+
+  it("does not validate array element schema when a decorated optional array default is empty", () => {
+    const result = createInstance<OptionalArrayDefaultExample>(
+      {},
+      OptionalArrayDefaultExample,
+      null,
+      "root",
+      { collectErrors: true }
+    ) as {
+      instance: OptionalArrayDefaultExample | null;
+      errors: RIFTError[];
+    };
+
+    expect(result.errors).toEqual([]);
+    expect(result.instance?.resources).toEqual([]);
+  });
+
+  it("still accepts an explicitly provided empty decorated optional array", () => {
+    const instance = createInstance(
+      { resources: [] },
+      OptionalArrayDefaultExample
+    );
+
+    expect(instance.resources).toEqual([]);
   });
 });
