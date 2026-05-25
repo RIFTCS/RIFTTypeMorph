@@ -99,4 +99,17 @@ describe("createInstance - non-required and required field behavior", () => {
 
     expect(instance.resources).toEqual([]);
   });
+
+  class OptionalArrayNonEmptyDefaultExample {
+    @OptionalField(TSType.Array, Resource, () => [{ id: "r1" }])
+    resources!: Resource[];
+  }
+
+  it("hydrates elements from a non-empty decorated optional array default", () => {
+    const instance = createInstance({}, OptionalArrayNonEmptyDefaultExample);
+
+    expect(instance.resources).toHaveLength(1);
+    expect(instance.resources[0]).toBeInstanceOf(Resource);
+    expect(instance.resources[0].id).toBe("r1");
+  });
 });
