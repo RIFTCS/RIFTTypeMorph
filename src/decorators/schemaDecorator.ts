@@ -1,5 +1,7 @@
-import { TSField, TSType } from "../index";
+import { TSField } from "../core/TSField";
 import type { Constructor } from "../core/TSField";
+import { TSType } from "../core/TSType";
+import { MODERN_SCHEMA_FIELDS_METADATA } from "../core/metadataKeys";
 import {RIFTError} from "../utils/errors";
 
 /**
@@ -24,6 +26,22 @@ export function Field(
     ) {
       const context = args.find((a) => a && typeof a === "object" && "kind" in a);
       const key = String(context.name);
+      const field = new TSField(type, instantiator ?? null, required, ifEmpty);
+
+      if (context.metadata && typeof context.metadata === "object") {
+        const metadata = context.metadata as Record<PropertyKey, any>;
+        const inherited = metadata[MODERN_SCHEMA_FIELDS_METADATA] as
+          | Record<string, TSField>
+          | undefined;
+        const schemaFields = Object.prototype.hasOwnProperty.call(
+          metadata,
+          MODERN_SCHEMA_FIELDS_METADATA
+        )
+          ? inherited ?? {}
+          : { ...(inherited ?? {}) };
+        schemaFields[key] = field;
+        metadata[MODERN_SCHEMA_FIELDS_METADATA] = schemaFields;
+      }
 
       context.addInitializer(function (this: any) {
         const proto = Object.getPrototypeOf(this);
@@ -35,7 +53,6 @@ export function Field(
             writable: true,
           });
         }
-        const field = new TSField(type, instantiator ?? null, required, ifEmpty);
         proto.__schemaFields[key] = field;
         //(proto as any)[key] = field;
       });

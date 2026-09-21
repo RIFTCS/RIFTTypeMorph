@@ -1,6 +1,7 @@
 import {TSField} from "./TSField";
 import {TSType} from "./TSType";
 import {RIFTError} from "../utils/errors";
+import {MODERN_SCHEMA_FIELDS_METADATA} from "./metadataKeys";
 
 export interface ParsedSchema {
     fields: Record<string, TSField>;
@@ -20,10 +21,7 @@ export function ensureParsed(target: any) {
 
     if (!ctor || parsedCache.has(ctor)) return;
 
-    // Create a prototype-only instance
-    const protoInstance = Object.create(ctor.prototype);
-
-    parseClass(protoInstance);
+    parseClass(ctor);
 
     parsedCache.add(ctor);
 }
@@ -65,8 +63,17 @@ function materializeSchemaSlot(proto: any, key: string, field: TSField) {
  * Normalizes legacy + decorator-based schemas into a single format.
  * This is the ONLY place where we inspect instance/prototype structure.
  */
-export function parseClass(instance: any): ParsedSchema {
-    const proto = Object.getPrototypeOf(instance);
+export function parseClass(target: any): ParsedSchema {
+    if (!target) {
+        return {fields: {}, expandoKey: null, includedKeys: new Set<string>()};
+    }
+
+    const instance = typeof target === "function"
+        ? Object.create(target.prototype)
+        : target;
+    const proto = typeof target === "function"
+        ? target.prototype
+        : Object.getPrototypeOf(target);
     const fields: Record<string, TSField> = {};
     let expandoKey: string | null = null;
 
@@ -85,6 +92,32 @@ export function parseClass(instance: any): ParsedSchema {
     }
 
     // 1. Preferred: decorator metadata
+    // Modern decorators can expose metadata directly on the constructor when
+    // Symbol.metadata is available, avoiding any need to instantiate the class.
+    if (typeof target === "function") {
+        const symbolMetadata = (Symbol as any).metadata;
+        const metadata = symbolMetadata ? (target as any)[symbolMetadata] : undefined;
+        const modernFields = metadata?.[MODERN_SCHEMA_FIELDS_METADATA] as Record<string, TSField> | undefined;
+
+        if (modernFields) {
+            for (const [key, field] of Object.entries(modernFields)) {
+                if (!(field instanceof TSField)) continue;
+                if (fields[key]) continue;
+
+                if (field.fieldType === TSType.Expando) {
+                    if (expandoKey && expandoKey !== key) {
+                        throw new RIFTError(
+                            "Multiple expando properties were defined! There can be only one."
+                        );
+                    }
+                    expandoKey = key;
+                } else {
+                    fields[key] = field;
+                }
+            }
+        }
+    }
+
     let decoCursor = proto;
     while (decoCursor && decoCursor !== Object.prototype) {
         if (decoCursor.__schemaFields) {

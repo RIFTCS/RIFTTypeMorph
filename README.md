@@ -392,3 +392,9 @@ Example tests live under `tests/` and include both unit and integration coverage
 ## 🌐 Repository
 
 [https://github.com/RIFTCS/rifttypemorph](https://github.com/RIFTCS/rifttypemorph)
+
+---
+
+## Grain transpilation
+
+TypeMorph ER entities can be lowered into inferred Grain world events, permissions, relationship IR, and effective-dated joins without defining a separate event model. `@Reference(...)` supplies ER topology and `@AppliesTo(...)` selects an intended domain applicability relation; the transpiler then derives shared join coordinates and "newest at-or-before" temporal lookups. See [`grain_transpilation.md`](grain_transpilation.md) for the complete Store / Item / Purchaser retail example and exact generated Grain Markdown.
