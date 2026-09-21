@@ -1,11 +1,12 @@
 import { RIFTAnnotation } from "../core/annotations";
 import { describeClass, DescribedField, TypeMorphClassDescription } from "../core/introspection";
 import type { Constructor } from "../core/TSField";
+import type { GrainRuleSet } from "./dsl";
+import { grainEntityMetadata } from "./entityMetadata";
 import { TSType } from "../core/TSType";
 import {
   AppliesToOptions,
   ER_ANNOTATION_NAMESPACE,
-  EntityOptions,
   MeasureOptions,
   ReferenceOptions,
   ScalarTypeOptions,
@@ -22,6 +23,9 @@ import {
   GrainRowIR,
   GrainTemporalJoinIR,
   GrainTranspileResult,
+  GrainExpectedIR,
+  GrainFieldsRowIR,
+  GrainSuppliedIR,
 } from "./model";
 
 interface ScalarCapabilities {
@@ -56,28 +60,8 @@ function annotationValues<T>(annotations: RIFTAnnotation[], name: string): T[] {
   return annotationsNamed(annotations, name).map((annotation) => annotation.value as T);
 }
 
-function humanizeIdentifier(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
 function entityNameOf(description: TypeMorphClassDescription): string {
-  const entityOptions = lastAnnotationValue<EntityOptions>(description.annotations, "entity");
-  if (!entityOptions) {
-    throw new RIFTError(
-      `${description.name} is not an ER entity. Add @Entity() before Grain transpilation.`
-    );
-  }
-
-  const entityName = entityOptions.name?.trim() || humanizeIdentifier(description.name);
-  if (!entityName) {
-    throw new RIFTError(`Cannot infer an entity name for ${description.name}.`);
-  }
-  return entityName;
+  return grainEntityMetadata(description.ctor).name;
 }
 
 function scalarCapabilities(field: DescribedField): ScalarCapabilities | null {
@@ -197,8 +181,9 @@ function resolveRelationship(
 
 function lowerEntity(ctor: Constructor): GrainEntityIR {
   const description = describeClass(ctor);
-  const entityName = entityNameOf(description);
-  const eventName = `set ${entityName}`;
+  const entityMetadata = grainEntityMetadata(ctor);
+  const entityName = entityMetadata.name;
+  const eventName = entityMetadata.eventName;
   const fields = Object.keys(description.fields);
 
   for (const fieldName of fields) {
@@ -274,6 +259,7 @@ function lowerEntity(ctor: Constructor): GrainEntityIR {
     permissions.push({
       operation: "identity",
       on: `made by world on ${identityFields.join(", ")}`,
+      evidence: "inferred from TypeMorph ER identity metadata",
     });
   }
 
@@ -287,6 +273,7 @@ function lowerEntity(ctor: Constructor): GrainEntityIR {
       permissions.push({
         operation: "compare",
         on: `named ${eventName} on ${fieldName} with ${scalar.literal}`,
+        evidence: "inferred from TypeMorph scalar ordering metadata",
       });
     }
 
@@ -294,6 +281,7 @@ function lowerEntity(ctor: Constructor): GrainEntityIR {
       permissions.push({
         operation,
         on: `named ${eventName} on ${fieldName} with ${scalar.literal} -> named ${eventName}`,
+        evidence: "inferred from TypeMorph scalar operation metadata",
       });
     }
   }
@@ -460,10 +448,12 @@ function inferTemporalJoins(entities: GrainEntityIR[]): LoweredModelParts {
           {
             operation: "compare",
             on: `named ${provider.eventName} on ${mapping.providerField} with ${providerScalar.literal}`,
+            evidence: "inferred for ER relationship equality",
           },
           {
             operation: "compare",
             on: `named ${consumer.eventName} on ${mapping.consumerField} with ${consumerScalar.literal}`,
+            evidence: "inferred for ER relationship equality",
           }
         );
       }
@@ -535,12 +525,14 @@ function inferTemporalJoins(entities: GrainEntityIR[]): LoweredModelParts {
           permissions.push({
             operation: "compare",
             on: `named ${name} on ${payloadField} with ${scalar.literal}`,
+            evidence: "inferred from applicable provider scalar metadata",
           });
         }
         for (const operation of scalar.operations) {
           permissions.push({
             operation,
             on: `named ${name} on ${payloadField} with ${scalar.literal} -> named ${name}`,
+            evidence: "inferred from applicable provider scalar metadata",
           });
         }
       }
@@ -558,8 +550,22 @@ function emitWorldTable(entities: GrainEntityIR[]): string[] {
     "|---|---|---|",
     ...entities.map((entity) => {
       const fields = entity.fields.map((field) => `add ${field}`).join("; ");
-      return `| ${entity.eventName} | fields: ${fields} | inferred from TypeMorph ER metadata |`;
+      const statement = fields ? `fields: ${fields}` : "";
+      return `| ${entity.eventName} | ${statement} | inferred from TypeMorph ER metadata |`;
     }),
+  ];
+}
+
+function emitFieldsRowsTable(fieldRows: GrainFieldsRowIR[]): string[] {
+  if (!fieldRows.length) return [];
+  return [
+    "## Fields rows",
+    "",
+    "| selects | fields | evidence |",
+    "|---|---|---|",
+    ...fieldRows.map((row) =>
+      `| ${row.selects} | fields: ${row.fields.map((field) => `add ${field}`).join("; ")} | ${row.evidence} |`
+    ),
   ];
 }
 
@@ -571,7 +577,7 @@ function emitPermissionsTable(permissions: GrainPermissionIR[]): string[] {
     "|---|---|---|",
     ...permissions.map(
       (permission) =>
-        `| ${permission.operation} | ${permission.on} | inferred from TypeMorph ER metadata |`
+        `| ${permission.operation} | ${permission.on} | ${permission.evidence} |`
     ),
   ];
 }
@@ -599,13 +605,76 @@ function emitRowsTable(rows: GrainRowIR[]): string[] {
   ];
 }
 
-export function inferGrainModel(entities: readonly Constructor[]): GrainModelIR {
+function inferCurrentWords(entities: GrainEntityIR[]): GrainNarrowingIR[] {
+  const words: GrainNarrowingIR[] = [];
+  for (const entity of entities) {
+    if (!entity.temporal || entity.keys.length === 0) continue;
+    words.push({
+      name: `current ${entity.entityName}`,
+      selects: `newest by ${entity.temporal.field} of named ${entity.eventName} per ${entity.keys.join(" and ")}`,
+      evidence: `inferred from @${entity.temporal.kind === "effective" ? "EffectiveAt" : "RevisionAt"}() and @Key()`,
+    });
+  }
+  return words;
+}
+
+function assertUniqueRows(rows: GrainRowIR[]): void {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row.label)) {
+      throw new RIFTError(`More than one Grain row uses label '${row.label}'.`);
+    }
+    seen.add(row.label);
+  }
+}
+
+function assertUniqueWords(words: GrainNarrowingIR[]): void {
+  const byName = new Map<string, string>();
+  for (const word of words) {
+    const existing = byName.get(word.name);
+    if (existing !== undefined && existing !== word.selects) {
+      throw new RIFTError(
+        `More than one Grain narrowing word uses name '${word.name}' with different selections.`
+      );
+    }
+    byName.set(word.name, word.selects);
+  }
+}
+
+function dedupeWords(words: GrainNarrowingIR[]): GrainNarrowingIR[] {
+  const seen = new Set<string>();
+  const result: GrainNarrowingIR[] = [];
+  for (const word of words) {
+    const key = `${word.name}\u0000${word.selects}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(word);
+  }
+  return result;
+}
+
+export function inferGrainModel(
+  entities: readonly Constructor[],
+  options: { rules?: GrainRuleSet; inferCurrentWords?: boolean } = {}
+): GrainModelIR {
   const lowered = entities.map(lowerEntity);
   const inferred = inferTemporalJoins(lowered);
+  const rules = options.rules;
+  const currentWords = options.inferCurrentWords === false ? [] : inferCurrentWords(lowered);
   const permissions = dedupePermissions([
     ...lowered.flatMap((entity) => entity.permissions),
     ...inferred.permissions,
+    ...(rules?.permissions ?? []),
   ]);
+  const narrowing = dedupeWords([
+    ...currentWords,
+    ...inferred.narrowing,
+    ...(rules?.narrowing ?? []),
+  ]);
+  const rows = [...inferred.rows, ...(rules?.rows ?? [])];
+
+  assertUniqueWords(narrowing);
+  assertUniqueRows(rows);
 
   return {
     entities: lowered,
@@ -616,11 +685,41 @@ export function inferGrainModel(entities: readonly Constructor[]): GrainModelIR 
       fields: [...entity.fields],
     })),
     relationships: lowered.flatMap((entity) => entity.relationships),
+    fieldRows: [...(rules?.fieldRows ?? [])],
     temporalJoins: inferred.temporalJoins,
-    narrowing: inferred.narrowing,
-    rows: inferred.rows,
+    narrowing,
+    rows,
     permissions,
+    supplied: [...(rules?.supplied ?? [])],
+    expected: [...(rules?.expected ?? [])],
   };
+}
+
+function emitSuppliedTable(supplied: GrainSuppliedIR[]): string[] {
+  if (!supplied.length) return [];
+  return [
+    "## Examples: supplied events",
+    "",
+    "| event | its fields |",
+    "|---|---|",
+    ...supplied.map((item) => {
+      const fields = Object.entries(item.fields)
+        .map(([field, value]) => `${field}: ${value}`)
+        .join("; ");
+      return `| ${item.event} | ${fields} |`;
+    }),
+  ];
+}
+
+function emitExpectedTable(expected: GrainExpectedIR[]): string[] {
+  if (!expected.length) return [];
+  return [
+    "## Examples: made events expected",
+    "",
+    "| selection | figures |",
+    "|---|---|",
+    ...expected.map((item) => `| ${item.selection} | ${item.figures} |`),
+  ];
 }
 
 export function emitGrainMarkdown(model: GrainModelIR, title = "TypeMorph inferred model"): string {
@@ -628,23 +727,36 @@ export function emitGrainMarkdown(model: GrainModelIR, title = "TypeMorph inferr
     `# ${title}`,
     "",
     ...emitWorldTable(model.entities),
+  ];
+
+  const fieldRows = emitFieldsRowsTable(model.fieldRows);
+  if (fieldRows.length) lines.push("", ...fieldRows);
+  lines.push(
     "",
     ...emitPermissionsTable(model.permissions),
     "",
     ...emitNarrowingTable(model.narrowing),
     "",
-    ...emitRowsTable(model.rows),
-    "",
-  ];
+    ...emitRowsTable(model.rows)
+  );
+
+  const supplied = emitSuppliedTable(model.supplied);
+  if (supplied.length) lines.push("", ...supplied);
+  const expected = emitExpectedTable(model.expected);
+  if (expected.length) lines.push("", ...expected);
+  lines.push("");
 
   return `${lines.join("\n")}\n`;
 }
 
 export function transpileEntitiesToGrain(
   entities: readonly Constructor[],
-  options: { title?: string } = {}
+  options: { title?: string; rules?: GrainRuleSet; inferCurrentWords?: boolean } = {}
 ): GrainTranspileResult {
-  const model = inferGrainModel(entities);
+  const model = inferGrainModel(entities, {
+    rules: options.rules,
+    inferCurrentWords: options.inferCurrentWords,
+  });
   return {
     model,
     markdown: emitGrainMarkdown(model, options.title),

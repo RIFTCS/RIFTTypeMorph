@@ -49,7 +49,9 @@ export {
 } from "./grain/transpile";
 export type {
   GrainArithmeticOperation,
+  GrainPattern,
   GrainWorldEventIR,
+  GrainFieldsRowIR,
   GrainPermissionIR,
   GrainRelationshipIR,
   GrainRelationshipMappingIR,
@@ -59,4 +61,58 @@ export type {
   GrainEntityIR,
   GrainModelIR,
   GrainTranspileResult,
+  GrainFactValue,
+  GrainSuppliedIR,
+  GrainExpectedIR,
 } from "./grain/model";
+
+export { grain, grainRules, renderGrainSelection, renderGrainTerm, renderGrainHow } from "./grain/dsl";
+export type {
+  GrainCompareOperator,
+  GrainOrdering,
+  GrainSelection,
+  GrainTerm,
+  GrainHow,
+  GrainPermissionSide,
+  GrainRuleSet,
+  GrainRuleSetInput,
+  GrainExpectedFigures,
+} from "./grain/dsl";
+export { grainEntityMetadata } from "./grain/entityMetadata";
+export type { GrainEntityMetadata } from "./grain/entityMetadata";
+
+export {
+  Transform,
+  From,
+  Current,
+  Latest,
+  Previous,
+  Next,
+  Applicable,
+  Grouped,
+} from "./transforms/decorators";
+export type { TransformOptions } from "./transforms/metadata";
+export {
+  defineTransformOperator,
+  getTransformOperator,
+  sum,
+  maximum,
+  minimum,
+  count,
+} from "./transforms/runtime";
+export { compileTransformClass, compileTransformClasses } from "./transforms/compile";
+export { lowerTransformsToGrainRules } from "./grain/transformLowering";
+export type {
+  TransformSourceRef,
+  TransformInputKind,
+  TransformInputIR,
+  TransformValueExpression,
+  TransformPredicateExpression,
+  TransformOutputFieldIR,
+  TransformIR,
+  TransformOperatorDefinition,
+  TransformCompilation,
+} from "./transforms/model";
+
+export { transpileExecutableTransformsToGrain, mergeGrainRuleSets } from "./transforms/transpile";
+export type { ExecutableTransformTranspileResult } from "./transforms/transpile";

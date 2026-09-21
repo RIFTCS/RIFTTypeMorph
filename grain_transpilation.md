@@ -292,34 +292,38 @@ currently emits:
 
 | operation | on | evidence |
 |---|---|---|
-| identity | made by world on id | inferred from TypeMorph ER metadata |
-| identity | made by world on storeId, itemId, when | inferred from TypeMorph ER metadata |
-| compare | named set stock on when with date | inferred from TypeMorph ER metadata |
-| compare | named set stock on quantity with number | inferred from TypeMorph ER metadata |
-| plus | named set stock on quantity with number -> named set stock | inferred from TypeMorph ER metadata |
-| less | named set stock on quantity with number -> named set stock | inferred from TypeMorph ER metadata |
-| identity | made by world on storeId, itemId, purchaserId, when | inferred from TypeMorph ER metadata |
-| compare | named set sales on when with date | inferred from TypeMorph ER metadata |
-| compare | named set sales on quantity with number | inferred from TypeMorph ER metadata |
-| plus | named set sales on quantity with number -> named set sales | inferred from TypeMorph ER metadata |
-| less | named set sales on quantity with number -> named set sales | inferred from TypeMorph ER metadata |
-| compare | named set price on when with date | inferred from TypeMorph ER metadata |
-| compare | named set price on amount with number | inferred from TypeMorph ER metadata |
-| plus | named set price on amount with number -> named set price | inferred from TypeMorph ER metadata |
-| less | named set price on amount with number -> named set price | inferred from TypeMorph ER metadata |
-| identity | made by world on storeId, when | inferred from TypeMorph ER metadata |
-| compare | named set register on when with date | inferred from TypeMorph ER metadata |
-| compare | named set register on amount with number | inferred from TypeMorph ER metadata |
-| plus | named set register on amount with number -> named set register | inferred from TypeMorph ER metadata |
-| less | named set register on amount with number -> named set register | inferred from TypeMorph ER metadata |
-| compare | named price applicable to sales on amount with number | inferred from TypeMorph ER metadata |
-| plus | named price applicable to sales on amount with number -> named price applicable to sales | inferred from TypeMorph ER metadata |
-| less | named price applicable to sales on amount with number -> named price applicable to sales | inferred from TypeMorph ER metadata |
+| identity | made by world on id | inferred from TypeMorph ER identity metadata |
+| identity | made by world on storeId, itemId, when | inferred from TypeMorph ER identity metadata |
+| compare | named set stock on when with date | inferred from TypeMorph scalar ordering metadata |
+| compare | named set stock on quantity with number | inferred from TypeMorph scalar ordering metadata |
+| plus | named set stock on quantity with number -> named set stock | inferred from TypeMorph scalar operation metadata |
+| less | named set stock on quantity with number -> named set stock | inferred from TypeMorph scalar operation metadata |
+| identity | made by world on storeId, itemId, purchaserId, when | inferred from TypeMorph ER identity metadata |
+| compare | named set sales on when with date | inferred from TypeMorph scalar ordering metadata |
+| compare | named set sales on quantity with number | inferred from TypeMorph scalar ordering metadata |
+| plus | named set sales on quantity with number -> named set sales | inferred from TypeMorph scalar operation metadata |
+| less | named set sales on quantity with number -> named set sales | inferred from TypeMorph scalar operation metadata |
+| compare | named set price on when with date | inferred from TypeMorph scalar ordering metadata |
+| compare | named set price on amount with number | inferred from TypeMorph scalar ordering metadata |
+| plus | named set price on amount with number -> named set price | inferred from TypeMorph scalar operation metadata |
+| less | named set price on amount with number -> named set price | inferred from TypeMorph scalar operation metadata |
+| identity | made by world on storeId, when | inferred from TypeMorph ER identity metadata |
+| compare | named set register on when with date | inferred from TypeMorph scalar ordering metadata |
+| compare | named set register on amount with number | inferred from TypeMorph scalar ordering metadata |
+| plus | named set register on amount with number -> named set register | inferred from TypeMorph scalar operation metadata |
+| less | named set register on amount with number -> named set register | inferred from TypeMorph scalar operation metadata |
+| compare | named price applicable to sales on amount with number | inferred from applicable provider scalar metadata |
+| plus | named price applicable to sales on amount with number -> named price applicable to sales | inferred from applicable provider scalar metadata |
+| less | named price applicable to sales on amount with number -> named price applicable to sales | inferred from applicable provider scalar metadata |
 
 ## Narrowing table
 
 | name | selects | evidence |
 |---|---|---|
+| current stock | newest by when of named set stock per storeId and itemId | inferred from @EffectiveAt() and @Key() |
+| current sales | newest by when of named set sales per storeId and itemId and purchaserId | inferred from @EffectiveAt() and @Key() |
+| current price | newest by when of named set price per storeId and itemId | inferred from @EffectiveAt() and @Key() |
+| current register | newest by when of named set register per storeId | inferred from @EffectiveAt() and @Key() |
 | price applicable to sales | made by (work out and amount: amount of (newest by when of (named set price and when <= their when) per storeId and itemId)) from named set sales | inferred from @AppliesTo(sales) and shared @Reference coordinates |
 
 ## Rows
@@ -327,8 +331,6 @@ currently emits:
 | # | selects | pattern | parameters | evidence |
 |---|---|---|---|---|
 | TJ1 | named set sales | work out | amount: amount of (newest by when of (named set price and when <= their when) per storeId and itemId) | inferred from @AppliesTo(sales) and shared @Reference coordinates |
-
-
 ```
 
 The important generated part is:
@@ -379,30 +381,51 @@ ambiguous duplicate references to the same target key
 provider payload colliding with an existing consumer field
 ```
 
-## What is deliberately not inferred yet
+## Computational rules are expressed, not guessed
 
-The ER model now contains enough information to infer **which Price applies to a Sale**. It still does not contain enough information to infer a business formula such as:
+The ER model contains enough information to infer source facts, current/superseding facts, relationships and temporal applicability. It still does not contain enough information to infer a business formula such as:
 
 ```text
 takings = sales.quantity * applicablePrice.amount
 ```
 
-That is not an ER relationship; it is a domain computation. Inferring it from field names such as `quantity` and `amount` would be guessing.
+That is intentionally not guessed from field names. Instead, v4 adds a typed Grain rule DSL which sits beside the ER model and refers to Grain concepts structurally rather than embedding Markdown strings.
 
-The next semantic layer should therefore describe derived measures/formulas in domain terms, for example something in the direction of:
+For example, a calculation can be declared as:
 
 ```ts
-@DerivedMeasure({
-  from: Sales,
-  using: Price,
-  operation: "times",
-  left: "quantity",
-  right: "amount"
-})
-class Takings { ... }
+const rules = grainRules({
+  permissions: [
+    grain.permission("times", grain.side(grain.named("sales"), "amount"), {
+      with: grain.side(grain.named("price"), "amount"),
+      landing: grain.named("takings"),
+    }),
+  ],
+  narrowing: [
+    grain.word("takings", grain.madeBy("work out", { from: grain.named("sales") })),
+  ],
+  rows: [
+    grain.workOut("1", grain.named("sales"), {
+      amount: grain.times(
+        grain.base(),
+        grain.fieldOf("amount", grain.named("price"))
+      ),
+    }),
+  ],
+});
+
+const result = transpileEntitiesToGrain([Sales, Price], { rules });
 ```
 
-or, preferably, a typed expression DSL that can refer to entity fields without embedding Grain syntax. That layer can lower into Grain arithmetic permissions, narrowing words and rows in the same way temporal applicability now does.
+The same DSL covers Grain's six row patterns (`work out`, `account for`, `group`, `differ`, `spread`, `override`), ordered selections, lineage, absence tests, `then` fallback, folds, declared operators, Fields rows, supplied examples and expected assertions. See [`grain_demo_coverage.md`](grain_demo_coverage.md) for the demo-by-demo coverage matrix.
+
+This keeps the architectural boundary clear:
+
+```text
+ER facts and relationships       inferred from TypeMorph metadata
+business calculations           expressed through typed Grain DSL
+Grain Markdown syntax            emitted by the transpiler
+```
 
 ## Running the example
 
@@ -420,6 +443,7 @@ The tests covering this path are:
 tests/grainTranspilation.test.ts
 tests/grainRetailTranspilation.test.ts
 tests/grainRelationshipInference.test.ts
+tests/grainDemoDsl.test.ts
 ```
 
-The retail tests assert the relationship IR, temporal join IR, narrowing word and generated row. The relationship tests also cover differently named local foreign-key fields and verify that shared references alone do not invent an applicability relation.
+The retail tests assert the relationship IR, temporal join IR, narrowing word and generated row. The relationship tests also cover differently named local foreign-key fields and verify that shared references alone do not invent an applicability relation. The demo DSL test covers the Grain language surface used by the repository demos, while `examples/grain_demo_coverage.ts` builds representative complete models.

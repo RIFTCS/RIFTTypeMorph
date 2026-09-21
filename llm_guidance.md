@@ -351,3 +351,21 @@ Serialization defines how data is represented.
 Rehydration is the only legal way state may change.”
 
 Reasoning from this model avoids incorrect assumptions and unsafe mutations.
+
+## Executable transform authoring
+
+Prefer the executable transform metamodel over hand-building `grainRules(...)` for ordinary business calculations.
+
+Use `@Transform("word")` on a static method and decorate every input parameter with a selector role:
+
+- `@From(Entity)` for the principal/source fact
+- `@Applicable(Entity)` for an identity/as-of reader relative to the principal
+- `@Previous(Entity)` for a lagged ordered reader
+- `@Latest(source, { by, per })` for the current state of a recursive logical word
+- `@Next(Entity, { by })` for the next ordered coordinate
+- `@Current(Entity)` for the inferred current/superseding view
+- `@Grouped(Entity, { per })` for a grouped array input
+
+Keep bodies to the supported executable subset: const bindings, guard-style `if (...) return;`, ordinary arithmetic, nullish coalescing, direct field reads, aggregate helpers and registered transform operators, followed by an object-literal return.
+
+Use `grainRules(...)` when the domain operation is intrinsically one of Grain's provenance/dataflow patterns (`account for`, `spread`, `override`, `differ`) or when the executable subset cannot faithfully express it. Do not force those concepts into fake arithmetic functions.

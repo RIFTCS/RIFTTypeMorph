@@ -65,17 +65,17 @@ describe("Grain transpilation", () => {
 
     expect(price.permissions).toEqual(
       expect.arrayContaining([
-        { operation: "identity", on: "made by world on shop, when" },
-        { operation: "compare", on: "named set price on when with date" },
-        { operation: "compare", on: "named set price on amount with number" },
-        {
+        expect.objectContaining({ operation: "identity", on: "made by world on shop, when" }),
+        expect.objectContaining({ operation: "compare", on: "named set price on when with date" }),
+        expect.objectContaining({ operation: "compare", on: "named set price on amount with number" }),
+        expect.objectContaining({
           operation: "plus",
           on: "named set price on amount with number -> named set price",
-        },
-        {
+        }),
+        expect.objectContaining({
           operation: "less",
           on: "named set price on amount with number -> named set price",
-        },
+        }),
       ])
     );
 
@@ -100,17 +100,17 @@ describe("Grain transpilation", () => {
     expect(balance.temporal).toEqual({ kind: "revision", field: "revision" });
     expect(balance.permissions).toEqual(
       expect.arrayContaining([
-        { operation: "identity", on: "made by world on accountId, revision" },
-        { operation: "compare", on: "named set account balance on revision with date" },
-        { operation: "compare", on: "named set account balance on balance with number" },
-        {
+        expect.objectContaining({ operation: "identity", on: "made by world on accountId, revision" }),
+        expect.objectContaining({ operation: "compare", on: "named set account balance on revision with date" }),
+        expect.objectContaining({ operation: "compare", on: "named set account balance on balance with number" }),
+        expect.objectContaining({
           operation: "plus",
           on: "named set account balance on balance with number -> named set account balance",
-        },
-        {
+        }),
+        expect.objectContaining({
           operation: "less",
           on: "named set account balance on balance with number -> named set account balance",
-        },
+        }),
       ])
     );
   });

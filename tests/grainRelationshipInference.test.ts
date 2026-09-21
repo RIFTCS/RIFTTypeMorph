@@ -90,14 +90,14 @@ describe("Grain relationship and temporal join inference", () => {
 
     expect(model.permissions).toEqual(
       expect.arrayContaining([
-        { operation: "compare", on: "named set price on shop with text" },
-        { operation: "compare", on: "named set sale on shopId with text" },
+        expect.objectContaining({ operation: "compare", on: "named set price on shop with text" }),
+        expect.objectContaining({ operation: "compare", on: "named set sale on shopId with text" }),
       ])
     );
   });
 
   it("does not invent an applicability join from shared references alone", () => {
-    const model = inferGrainModel([Shop, Sale, StockWithoutApplicability]);
+    const model = inferGrainModel([Shop, Sale, StockWithoutApplicability], { inferCurrentWords: false });
     expect(model.temporalJoins).toEqual([]);
     expect(model.rows).toEqual([]);
     expect(model.narrowing).toEqual([]);

@@ -186,9 +186,13 @@ describe("retail ER -> Grain documentation model", () => {
       expect.objectContaining({ providerField: "itemId", consumerField: "itemId", targetEntity: Item }),
     ]);
 
-    expect(model.narrowing).toEqual([
-      expect.objectContaining({ name: "price applicable to sales" }),
-    ]);
+    expect(model.narrowing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "current sales" }),
+        expect.objectContaining({ name: "current price" }),
+        expect.objectContaining({ name: "price applicable to sales" }),
+      ])
+    );
     expect(model.rows).toEqual([
       expect.objectContaining({
         label: "TJ1",
@@ -218,12 +222,12 @@ describe("retail ER -> Grain documentation model", () => {
     expect(sales.temporal).toEqual({ kind: "effective", field: "when" });
     expect(sales.permissions).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           operation: "identity",
           on: "made by world on storeId, itemId, purchaserId, when",
-        },
-        { operation: "compare", on: "named set sales on when with date" },
-        { operation: "compare", on: "named set sales on quantity with number" },
+        }),
+        expect.objectContaining({ operation: "compare", on: "named set sales on when with date" }),
+        expect.objectContaining({ operation: "compare", on: "named set sales on quantity with number" }),
       ])
     );
   });
@@ -234,15 +238,15 @@ describe("retail ER -> Grain documentation model", () => {
 
     expect(price.permissions).toEqual(
       expect.arrayContaining([
-        { operation: "compare", on: "named set price on amount with number" },
-        {
+        expect.objectContaining({ operation: "compare", on: "named set price on amount with number" }),
+        expect.objectContaining({
           operation: "plus",
           on: "named set price on amount with number -> named set price",
-        },
-        {
+        }),
+        expect.objectContaining({
           operation: "less",
           on: "named set price on amount with number -> named set price",
-        },
+        }),
       ])
     );
   });

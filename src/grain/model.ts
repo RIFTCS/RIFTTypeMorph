@@ -1,6 +1,7 @@
 import type { Constructor } from "../core/TSField";
 
 export type GrainArithmeticOperation = "plus" | "less" | "times" | "over";
+export type GrainPattern = "account for" | "work out" | "group" | "differ" | "spread" | "override";
 
 export interface GrainWorldEventIR {
   entity: Constructor;
@@ -9,9 +10,16 @@ export interface GrainWorldEventIR {
   fields: string[];
 }
 
+export interface GrainFieldsRowIR {
+  selects: string;
+  fields: string[];
+  evidence: string;
+}
+
 export interface GrainPermissionIR {
-  operation: "identity" | "compare" | GrainArithmeticOperation;
+  operation: string;
   on: string;
+  evidence: string;
 }
 
 export interface GrainRelationshipIR {
@@ -48,7 +56,7 @@ export interface GrainTemporalJoinIR {
 export interface GrainRowIR {
   label: string;
   selects: string;
-  pattern: "work out";
+  pattern: GrainPattern;
   parameters: string;
   evidence: string;
 }
@@ -57,6 +65,18 @@ export interface GrainNarrowingIR {
   name: string;
   selects: string;
   evidence: string;
+}
+
+export type GrainFactValue = string | number;
+
+export interface GrainSuppliedIR {
+  event: string;
+  fields: Record<string, GrainFactValue>;
+}
+
+export interface GrainExpectedIR {
+  selection: string;
+  figures: string;
 }
 
 export interface GrainEntityIR {
@@ -77,10 +97,13 @@ export interface GrainModelIR {
   entities: GrainEntityIR[];
   world: GrainWorldEventIR[];
   relationships: GrainRelationshipIR[];
+  fieldRows: GrainFieldsRowIR[];
   temporalJoins: GrainTemporalJoinIR[];
   narrowing: GrainNarrowingIR[];
   rows: GrainRowIR[];
   permissions: GrainPermissionIR[];
+  supplied: GrainSuppliedIR[];
+  expected: GrainExpectedIR[];
 }
 
 export interface GrainTranspileResult {

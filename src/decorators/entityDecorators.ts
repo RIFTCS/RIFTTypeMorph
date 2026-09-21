@@ -5,6 +5,7 @@ export const ER_ANNOTATION_NAMESPACE = "er";
 
 export interface EntityOptions {
   name?: string;
+  eventName?: string;
 }
 
 export interface ScalarTypeOptions {

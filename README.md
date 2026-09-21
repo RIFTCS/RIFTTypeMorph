@@ -398,3 +398,11 @@ Example tests live under `tests/` and include both unit and integration coverage
 ## Grain transpilation
 
 TypeMorph ER entities can be lowered into inferred Grain world events, permissions, relationship IR, and effective-dated joins without defining a separate event model. `@Reference(...)` supplies ER topology and `@AppliesTo(...)` selects an intended domain applicability relation; the transpiler then derives shared join coordinates and "newest at-or-before" temporal lookups. See [`grain_transpilation.md`](grain_transpilation.md) for the complete Store / Item / Purchaser retail example and exact generated Grain Markdown.
+
+### Executable transforms
+
+Normal business rules can now be authored as ordinary executable TypeScript methods. Input decorators such as `@From`, `@Applicable`, `@Previous`, `@Latest`, `@Next`, `@Current`, and `@Grouped` describe which facts are handed to the method; the method body uses normal arithmetic, `??`, guard-style early returns, and executable aggregate/operator helpers. TypeMorph parses the method AST into a transform IR and lowers that into the Grain AST. The same method can be unit-tested directly without Grain. See [`transform_metamodel.md`](transform_metamodel.md) and [`examples/executable_transforms.ts`](examples/executable_transforms.ts).
+
+### Grain demo-language coverage
+
+The executable transform layer covers the common calculation/reader/state patterns, while the typed Grain rule DSL remains the complete backend and escape hatch for Grain-native dataflow concepts such as `account for`, `spread`, `override`, and `differ`. Representative models based on the Grain demo repository are in [`examples/grain_demo_coverage.ts`](examples/grain_demo_coverage.ts), with a demo-by-demo matrix in [`grain_demo_coverage.md`](grain_demo_coverage.md).
