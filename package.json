@@ -1,36 +1,56 @@
 {
-  "name": "rifttypemorph",
+  "name": "@riftcs/rifttypemorph",
   "version": "1.0.0",
-  "description": "Lightweight runtime type validation and JSON-to-class mapping for TypeScript.",
+  "description": "Decorator-first runtime schema validation, hydration, serialisation and cloning for TypeScript.",
   "author": "Liam <liam@riftcs.com> (RIFT Pty Ltd)",
-  "license": "MIT",
-
+  "license": "SEE LICENSE IN LICENSE",
   "type": "commonjs",
-
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./dist/index.js"
     }
   },
-
-  "files": ["dist"],
-
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RIFTCS/rifttypemorph.git"
+  },
+  "homepage": "https://github.com/RIFTCS/rifttypemorph#readme",
+  "bugs": {
+    "url": "https://github.com/RIFTCS/rifttypemorph/issues"
+  },
+  "keywords": [
+    "typescript",
+    "decorators",
+    "runtime-validation",
+    "serialization",
+    "deserialization",
+    "hydration",
+    "schema"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "dev": "vitest watch",
-    "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "prepack": "npm run clean && npm run build && npm test && npm run verify:dist",
+    "release:check": "npm run prepack && npm pack --dry-run --ignore-scripts"
   },
-
   "devDependencies": {
+    "@types/node": "^22.7.1",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.0",
-    "@types/node": "^22.7.1"
+    "vitest": "^2.1.0"
   }
 }
