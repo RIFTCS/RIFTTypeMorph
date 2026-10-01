@@ -21,7 +21,15 @@ type SerialisedTypeFor<T> =
     T extends null ? "null" :
     Constructor<T>;
 
-export function matchesSerialisedType(value: any, type: string): boolean {
+export type SerialisedRuntimeType = string | Constructor<any>;
+
+export function matchesSerialisedType(value: any, type: SerialisedRuntimeType): boolean {
+    if (typeof type === "function") {
+        if (value === null || value === undefined) return false;
+
+        return value.constructor === type;
+    }
+
     switch (type) {
         case "string":
         case "number":
@@ -35,10 +43,11 @@ export function matchesSerialisedType(value: any, type: string): boolean {
             return value === null;
 
         default:
-            if (value === null || value === undefined) return false;
-
-            const ctor = value.constructor;
-            return ctor && ctor.name === type;
+            // Constructor-backed runtime types are represented by the constructor
+            // object itself. Arbitrary class-name strings are intentionally not
+            // interpreted as runtime identities because that would reintroduce
+            // a dependency on Function.name and break identifier obfuscation.
+            return false;
     }
 }
 
@@ -49,18 +58,27 @@ export interface CustomSerialiser {
 
 export interface CustomSerialiserMeta {
     serialiser: CustomSerialiser;
-    serialisedType: string;
+    serialisedType: SerialisedRuntimeType;
     handlesNull?: boolean;
 }
 
-function resolveTypeString(type: Constructor<any> | string): string {
+function resolveRuntimeType(type: Constructor<any> | string): SerialisedRuntimeType {
     if (typeof type === "string") return type;
 
     if (type === String) return "string";
     if (type === Number) return "number";
     if (type === Boolean) return "boolean";
 
-    return type.name;
+    /*
+     * Keep non-primitive constructors as runtime identities.
+     *
+     * Using a constructor function's display name here makes schema validation dependent on a
+     * human-readable JavaScript identifier. Minifiers/obfuscators are free to
+     * rename classes, and unrelated constructors may also share the same name.
+     * The constructor object is already the stable runtime identity TypeMorph
+     * needs, so retaining it makes this path safe under identifier mangling.
+     */
+    return type;
 }
 
 /*
@@ -75,14 +93,14 @@ export function CustomSerialise<T = any, S = any>(
 ) {
     return function (...args: any[]) {
 
-        const typeString = resolveTypeString(serialisedType as any);
+        const runtimeType = resolveRuntimeType(serialisedType as any);
 
         const meta: CustomSerialiserMeta = {
             serialiser: {
                 serialise,
                 deserialise
             },
-            serialisedType: typeString,
+            serialisedType: runtimeType,
             handlesNull
         };
 

@@ -22,6 +22,18 @@ export interface CreateInstanceOptions {
     dontReplaceNullWithIfEmpty?: boolean;
 }
 
+function constructorDisplayName(ctor: Function): string {
+    try {
+        const descriptor = Object.getOwnPropertyDescriptor(ctor, "name");
+        const value = descriptor?.value;
+        return typeof value === "string" && value.length > 0
+            ? value
+            : "anonymous class";
+    } catch {
+        return "anonymous class";
+    }
+}
+
 function inferInstantiatorFromField<T>(
     field: TSField | null
 ): Constructor<T> | null {
@@ -173,7 +185,7 @@ export function createInstance<T = any>(
         } else {
             if (ctor.length > 0) {
                 fail(new RIFTError(
-                    `Constructor for ${ctor.name || "anonymous class"} requires arguments and cannot be safely called during hydration. ` +
+                    `Constructor for ${constructorDisplayName(ctor)} requires arguments and cannot be safely called during hydration. ` +
                     `Consider using @BypassConstructor() or options.bypassConstructor to avoid invoking the constructor.`,
                     outerType
                 ));
@@ -184,7 +196,7 @@ export function createInstance<T = any>(
                 instance = new ctor();
             } catch (e: any) {
                 fail(new RIFTError(
-                    `Error during construction of ${ctor.name || "anonymous class"}: ${e?.message ?? e}`,
+                    `Error during construction of ${constructorDisplayName(ctor)}: ${e?.message ?? e}`,
                     outerType
                 ));
                 return collectErrors ? {instance: null, errors} : null as any;

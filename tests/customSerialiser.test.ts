@@ -466,3 +466,73 @@ describe("CustomSerialise - handlesNull behaviour", () => {
     });
 
 });
+
+describe("CustomSerialise - obfuscation-safe constructor identity", () => {
+    it("continues to validate constructor-backed wire types after the constructor name changes", () => {
+        class WireValue {
+            constructor(public readonly value: number) {}
+        }
+
+        class Test {
+            @Field(TSType.Value)
+            @CustomSerialise<number, WireValue>(
+                value => new WireValue(value),
+                value => value.value,
+                WireValue
+            )
+            value!: number;
+        }
+
+        // Simulate a minifier/obfuscator changing the runtime class name after
+        // decorator metadata has been established. Constructor identity is
+        // unchanged and must remain sufficient for validation.
+        Object.defineProperty(WireValue, "name", {
+            value: "a",
+            configurable: true
+        });
+
+        const obj = new Test();
+        obj.value = 42;
+
+        const serialised = serialiseInstance(obj);
+        expect(serialised.value).toBeInstanceOf(WireValue);
+        expect(serialised.value.value).toBe(42);
+
+        const restored = createInstance(serialised, Test);
+        expect(restored.value).toBe(42);
+    });
+
+    it("does not accept an unrelated constructor merely because it has the same runtime name", () => {
+        class ExpectedWireValue {
+            constructor(public readonly value: number) {}
+        }
+
+        class WrongWireValue {
+            constructor(public readonly value: number) {}
+        }
+
+        Object.defineProperty(ExpectedWireValue, "name", {
+            value: "x",
+            configurable: true
+        });
+        Object.defineProperty(WrongWireValue, "name", {
+            value: "x",
+            configurable: true
+        });
+
+        class Test {
+            @Field(TSType.Value)
+            @CustomSerialise<number, ExpectedWireValue>(
+                value => new WrongWireValue(value) as any,
+                value => value.value,
+                ExpectedWireValue
+            )
+            value!: number;
+        }
+
+        const obj = new Test();
+        obj.value = 7;
+
+        expect(() => serialiseInstance(obj)).toThrow(RIFTError);
+    });
+});
