@@ -1,6 +1,6 @@
 {
   "name": "@riftcs/rifttypemorph",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Decorator-first runtime schema validation, hydration, serialisation and cloning for TypeScript.",
   "author": "Liam <liam@riftcs.com> (RIFT Pty Ltd)",
   "license": "SEE LICENSE IN LICENSE",
