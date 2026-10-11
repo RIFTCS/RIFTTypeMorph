@@ -3,7 +3,7 @@ import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {shouldBypassConstructor} from "../decorators/rehydrateOptions";
 import {parseClass} from "./schemaDiscovery";
-import {customDeserialisePass} from "../decorators/customSerialiser";
+import {CustomSerialiserUsage, customDeserialisePass} from "../decorators/customSerialiser";
 import {isTypeMorphSerialisableCtor} from "./classCustomSerialiser"
 
 type Constructor<T = any> = new (...args: any[]) => T;
@@ -15,6 +15,8 @@ export interface InstanceResult<T = any> {
 }
 
 export interface CreateInstanceOptions {
+    /** Scope used for field-level @CustomSerialise hooks. Defaults to serialiseInstance. */
+    customSerialiserUsage?: CustomSerialiserUsage;
     collectErrors?: boolean;
     bypassConstructor?: boolean;
     errorForExtraProps?: boolean;
@@ -235,7 +237,7 @@ export function createInstance<T = any>(
     const consumedKeys = new Set<string>();
 
     // ---- Custom deserialisation pass (before hydration)
-    customDeserialisePass(data, fields, outerType);
+    customDeserialisePass(data, fields, outerType, options?.customSerialiserUsage ?? "serialiseInstance");
 
     const hydrateArrayField = (
         rawArray: any,

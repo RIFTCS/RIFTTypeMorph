@@ -3,6 +3,8 @@ import {serialiseInstance} from "./serialiseInstance";
 import {RIFTError} from "../utils/errors";
 import {parseClass} from "./schemaDiscovery";
 import {getIgnoredFields} from "../decorators/schemaDecorator";
+import {CustomSerialiserUsage, usesCustomSerialiser} from "../decorators/customSerialiser";
+import {TSType} from "./TSType";
 
 function applyIgnoredPassthrough(source: any, target: any): void {
     if (!source || !target) return;
@@ -35,8 +37,9 @@ function applyIgnoredPassthrough(source: any, target: any): void {
     }
 }
 
-export function duplicateInstance<T>(
+function duplicateForUsage<T>(
     instance: T,
+    usage: CustomSerialiserUsage,
     options?: CreateInstanceOptions
 ): T {
 
@@ -47,16 +50,23 @@ export function duplicateInstance<T>(
     const ctor = (instance as any).constructor;
 
     const cloned = createInstance(
-        serialiseInstance(instance),
+        serialiseInstance(instance, {customSerialiserUsage: usage}),
         ctor,
         null,
         "duplicate",
-        options ?? {}
+        {...options, customSerialiserUsage: usage}
     ) as T;
 
     applyIgnoredPassthrough(instance, cloned);
 
     return cloned;
+}
+
+export function duplicateInstance<T>(
+    instance: T,
+    options?: CreateInstanceOptions
+): T {
+    return duplicateForUsage(instance, "duplicateInstance", options);
 }
 
 export interface CloneWithOptions {
@@ -81,7 +91,7 @@ export function cloneWith<T>(
     const {fields, expandoKey, includedKeys} = parseClass(instance);
 
     // Full snapshot of the original instance
-    const base = serialiseInstance(instance);
+    const base = serialiseInstance(instance, {customSerialiserUsage: "cloneWith"});
 
     const ctorAny = ctor as any;
     const hasCustomSerialise = typeof ctorAny.serialise === "function";
@@ -129,15 +139,23 @@ export function cloneWith<T>(
 
     let merged: any;
 
+    // A changed field that uses a custom wire format must be serialised before
+    // the matching hydration pass. The same is true of nested object/array
+    // changes, which may themselves contain scoped field serializers.
+    const needsReserialise = Object.keys(schemaChanges).some(key =>
+        fields[key].fieldType !== TSType.Value ||
+        usesCustomSerialiser(fields[key].customSerialiser, "cloneWith")
+    );
+
     // ---- Apply schema changes
-    if (hasCustomSerialise && Object.keys(schemaChanges).length > 0) {
-        const interim = duplicateInstance(instance);
+    if ((hasCustomSerialise || needsReserialise) && Object.keys(schemaChanges).length > 0) {
+        const interim = duplicateForUsage(instance, "cloneWith");
 
         for (const [key, value] of Object.entries(schemaChanges)) {
             (interim as any)[key] = value;
         }
 
-        merged = serialiseInstance(interim);
+        merged = serialiseInstance(interim, {customSerialiserUsage: "cloneWith"});
     } else if (hasCustomSerialise) {
         merged = {...base};
     } else {
@@ -188,7 +206,8 @@ export function cloneWith<T>(
         null,
         "cloneWith",
         {
-            errorForNullRequired: true
+            errorForNullRequired: true,
+            customSerialiserUsage: "cloneWith"
         }
     ) as T;
 

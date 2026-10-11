@@ -2,12 +2,18 @@ import {TSType} from "./TSType";
 import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {ensureParsed, parseClass} from "./schemaDiscovery";
-import {runFieldCustomSerialiser} from "../decorators/customSerialiser";
+import {
+    CustomSerialiserUsage,
+    runFieldCustomSerialiser,
+    usesCustomSerialiser
+} from "../decorators/customSerialiser";
 import {isTypeMorphSerialisableCtor} from "./classCustomSerialiser";
 
 type Constructor<T = any> = new (...args: any[]) => T;
 
 export interface SerialiseInstanceOptions {
+    /** Scope used for field-level @CustomSerialise hooks. Defaults to serialiseInstance. */
+    customSerialiserUsage?: CustomSerialiserUsage;
     errorForExtraProps?: boolean;
     flattenExpando?: boolean;
     /**
@@ -236,6 +242,7 @@ export function serialiseInstance(
         if (value === undefined || value === null) {
 
             const hasNullSerializer =
+                usesCustomSerialiser(fieldDef.customSerialiser, config?.customSerialiserUsage ?? "serialiseInstance") &&
                 fieldDef.customSerialiser?.handlesNull === true;
 
             if (value === null && hasNullSerializer) {
@@ -369,7 +376,8 @@ export function serialiseInstance(
             fieldDef,
             objInstance,
             output,
-            outerType
+            outerType,
+            config?.customSerialiserUsage ?? "serialiseInstance"
         );
     }
 

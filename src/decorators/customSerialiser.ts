@@ -56,10 +56,32 @@ export interface CustomSerialiser {
     deserialise: CustomDeserialiseFn;
 }
 
+/** The operation that is currently traversing a schema. */
+export type CustomSerialiserUsage = "serialiseInstance" | "duplicateInstance" | "cloneWith";
+
+/**
+ * Field hook applicability. Omitted operations retain the legacy behaviour
+ * of running both the serializer and deserializer.
+ */
+export type CustomSerialiserUsageOptions = Partial<Record<CustomSerialiserUsage, boolean>>;
+
+export interface CustomSerialiseOptions {
+    handlesNull?: boolean;
+    usage?: CustomSerialiserUsageOptions;
+}
+
 export interface CustomSerialiserMeta {
     serialiser: CustomSerialiser;
     serialisedType: SerialisedRuntimeType;
     handlesNull?: boolean;
+    usage?: CustomSerialiserUsageOptions;
+}
+
+export function usesCustomSerialiser(
+    custom: CustomSerialiserMeta | undefined,
+    usage: CustomSerialiserUsage
+): boolean {
+    return custom !== undefined && custom.usage?.[usage] !== false;
 }
 
 function resolveRuntimeType(type: Constructor<any> | string): SerialisedRuntimeType {
@@ -89,11 +111,14 @@ export function CustomSerialise<T = any, S = any>(
     serialise: (data: any) => any,
     deserialise: (data: any) => any,
     serialisedType: SerialisedTypeFor<S>,
-    handlesNull: boolean = false
+    handlesNullOrOptions: boolean | CustomSerialiseOptions = false
 ) {
     return function (...args: any[]) {
 
         const runtimeType = resolveRuntimeType(serialisedType as any);
+        const options: CustomSerialiseOptions = typeof handlesNullOrOptions === "boolean"
+            ? {handlesNull: handlesNullOrOptions}
+            : handlesNullOrOptions;
 
         const meta: CustomSerialiserMeta = {
             serialiser: {
@@ -101,7 +126,8 @@ export function CustomSerialise<T = any, S = any>(
                 deserialise
             },
             serialisedType: runtimeType,
-            handlesNull
+            handlesNull: options.handlesNull === true,
+            usage: options.usage
         };
 
         /*
@@ -189,7 +215,8 @@ Mutates the transport object directly.
 export function customDeserialisePass(
     input: any,
     schemaFields: Record<string, TSField>,
-    outerType: string
+    outerType: string,
+    usage: CustomSerialiserUsage = "serialiseInstance"
 ): void {
 
     if (!input || typeof input !== "object") {
@@ -199,7 +226,7 @@ export function customDeserialisePass(
     for (const [key, fieldDef] of Object.entries(schemaFields)) {
 
         const custom = fieldDef?.customSerialiser;
-        if (!custom) continue;
+        if (!custom || !usesCustomSerialiser(custom, usage)) continue;
 
         const rawValue = input[key];
 
@@ -232,11 +259,12 @@ export function runFieldCustomSerialiser(
     fieldDef: TSField,
     objInstance: any,
     output: any,
-    outerType: string
+    outerType: string,
+    usage: CustomSerialiserUsage = "serialiseInstance"
 ): boolean {
 
     const custom = fieldDef?.customSerialiser;
-    if (!custom) return false;
+    if (!custom || !usesCustomSerialiser(custom, usage)) return false;
 
     const value = output[key];
 

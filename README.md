@@ -283,6 +283,50 @@ restored.at.getTime();       // 1000
 
 The declared serialised type is checked, so an invalid custom serializer result fails immediately instead of silently changing the wire contract.
 
+### Custom serializer usage scopes
+
+Cloning normally performs a schema-aware serialisation/hydration round trip. For
+expensive *transport-only* transformations (compression, encryption, Base64,
+custom wire formats), that work is often unnecessary when duplicating or
+updating objects in memory. To skip it, specify per-operation switches in the
+fourth argument to `@CustomSerialise`:
+
+```typescript
+class Schedule {
+  @Field(TSType.Array, Baseline)
+  @CustomSerialise<Baseline[], string>(
+    encodeBaselines,
+    decodeBaselines,
+    "string",
+    {
+      usage: {
+        serialiseInstance: true,
+        duplicateInstance: false,
+        cloneWith: false
+      }
+    }
+  )
+  baselines!: Baseline[];
+}
+```
+
+This keeps `serialiseInstance(schedule)` and `createInstance(wire, Schedule)`
+using the compressed wire representation, while `duplicateInstance(schedule)`
+and `cloneWith(schedule, changes)` copy and hydrate the normal schema data
+without calling those codec functions. Scopes propagate into nested objects
+and arrays. A disabled scope skips **both** custom serialisation and its
+matching deserialisation, rather than passing uncompressed data to a decoder.
+
+All switches default to `true`, preserving previous behaviour when `usage`
+is omitted. You can independently enable one clone operation while disabling
+the other. The previous fourth-argument boolean, `handlesNull`, remains valid;
+when using an options object, write `handlesNull: true` instead.
+
+Usage scopes apply to **field-level `@CustomSerialise`** hooks. A class's
+static `serialise`/`deserialise` methods are a separate mechanism and continue
+to run during cloning. Ordinary schema hydration and deep-copy behaviour are
+unchanged; expensive field transforms are the part you can opt out of.
+
 ## Hydrate without running constructors
 
 Persistence models often have constructors that perform work which should not run while recreating stored state. `@BypassConstructor` hydrates by creating an object with the correct prototype and then applying the schema.

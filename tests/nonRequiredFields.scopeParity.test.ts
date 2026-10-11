@@ -1,0 +1,120 @@
+/**
+ * Operation-scope parity copy of nonRequiredFields.test.ts.
+ * The original test remains intact; this copy guards the usage-aware
+ * traversal against regressions in the existing schema contract.
+ */
+import { describe, it, expect } from "vitest";
+import {createInstance, Field, OptionalField} from "../src";
+import { TSField } from "../src";
+import { TSType } from "../src";
+import { RIFTError } from "../src/utils/errors";
+
+describe("createInstance - non-required and required field behavior", () => {
+
+  class OptionalExample {
+    requiredValue = new TSField(TSType.Value) as any;
+    optionalValue = new TSField(TSType.Value, null, false) as any;
+    optionalObject = new TSField(TSType.Object, () => new InnerOptional(), false) as any;
+  }
+
+  class InnerOptional {
+    value = new TSField(TSType.Value) as any;
+  }
+
+  it("creates instance and sets missing optional fields to null", () => {
+    const data = { requiredValue: "exists" };
+    const instance = createInstance(data, OptionalExample);
+    expect(instance.requiredValue).toBe("exists");
+    expect(instance.optionalValue).toBeNull();
+    expect(instance.optionalObject).toBeNull();
+  });
+
+  it("populates optional fields when provided in data", () => {
+    const data = {
+      requiredValue: "exists",
+      optionalValue: "provided",
+      optionalObject: { value: "nested" }
+    };
+    const instance = createInstance(data, OptionalExample);
+    expect(instance.optionalValue).toBe("provided");
+    expect(instance.optionalObject.value).toBe("nested");
+  });
+
+  it("throws when a required field is missing", () => {
+    const data = { optionalValue: "exists" };
+    expect(() => createInstance(data, OptionalExample)).toThrow(RIFTError);
+  });
+
+  it("handles explicit null in optional fields correctly", () => {
+    const data = {
+      requiredValue: "exists",
+      optionalValue: null,
+      optionalObject: null
+    };
+    const instance = createInstance(data, OptionalExample);
+    expect(instance.optionalValue).toBeNull();
+    expect(instance.optionalObject).toBeNull();
+  });
+
+  it("throws if an optional Object field is the wrong type", () => {
+    const data = {
+      requiredValue: "exists",
+      optionalObject: "notAnObject"
+    };
+    expect(() => createInstance(data, OptionalExample)).toThrow(RIFTError);
+  });
+
+  class Resource {
+    @Field(TSType.Value)
+    id!: string;
+  }
+
+  class OptionalArrayDefaultExample {
+    @OptionalField(TSType.Array, Resource, () => [])
+    resources!: Resource[];
+  }
+
+  it("default-initialises a missing optional decorated array to an empty array", () => {
+    const instance = createInstance({}, OptionalArrayDefaultExample);
+
+    expect(instance.resources).toEqual([]);
+  });
+
+  it("does not validate array element schema when a decorated optional array default is empty", () => {
+    const result = createInstance<OptionalArrayDefaultExample>(
+      {},
+      OptionalArrayDefaultExample,
+      null,
+      "root",
+      { collectErrors: true }
+    ) as {
+      instance: OptionalArrayDefaultExample | null;
+      errors: RIFTError[];
+    };
+
+    expect(result.errors).toEqual([]);
+    expect(result.instance?.resources).toEqual([]);
+  });
+
+  it("still accepts an explicitly provided empty decorated optional array", () => {
+    const instance = createInstance(
+      { resources: [] },
+      OptionalArrayDefaultExample
+    );
+
+    expect(instance.resources).toEqual([]);
+  });
+
+  class OptionalArrayNonEmptyDefaultExample {
+    @OptionalField(TSType.Array, Resource, () => [{ id: "r1" }])
+    resources!: Resource[];
+  }
+
+  it("hydrates elements from a non-empty decorated optional array default", () => {
+    const instance = createInstance({}, OptionalArrayNonEmptyDefaultExample);
+
+    expect(instance.resources).toHaveLength(1);
+    expect(instance.resources[0]).toBeInstanceOf(Resource);
+    expect(instance.resources[0].id).toBe("r1");
+  });
+});

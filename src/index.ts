@@ -9,4 +9,9 @@ export { duplicateInstance, cloneWith } from "./core/copyInstance";
 export { Include } from './decorators/serialiseOptions';
 export { parseClass } from './core/schemaDiscovery'
 export { CustomSerialise } from './decorators/customSerialiser'
+export type {
+    CustomSerialiserUsage,
+    CustomSerialiserUsageOptions,
+    CustomSerialiseOptions
+} from './decorators/customSerialiser'
 export { TypeMorphSerialisableCtor } from './core/classCustomSerialiser'
