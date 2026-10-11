@@ -1,4 +1,5 @@
 import {TSType} from "./TSType";
+import {unwrapUpdateTarget} from "./updateWith";
 import {RIFTError} from "../utils/errors";
 import {TSField} from "./TSField";
 import {ensureParsed, parseClass} from "./schemaDiscovery";
@@ -92,12 +93,15 @@ export function serialiseInstance(
         return null;
     }
 
+    instance = unwrapUpdateTarget(instance);
+
     // ensure it's been parsed
     ensureParsed(instance);
 
     // ---- Helper: ensure plain data only
     const serialiseValue = (value: any, ctx: string): any => {
         if (value === null || value === undefined) return null;
+        value = unwrapUpdateTarget(value);
 
         const ctor = value?.constructor;
 

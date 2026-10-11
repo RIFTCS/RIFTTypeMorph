@@ -6,6 +6,7 @@ export { createInstance } from "./core/createInstance";
 export { serialiseInstance } from "./core/serialiseInstance";
 export { validateInstance } from "./core/validateInstance";
 export { duplicateInstance, cloneWith } from "./core/copyInstance";
+export { updateWith } from "./core/updateWith";
 export { Include } from './decorators/serialiseOptions';
 export { parseClass } from './core/schemaDiscovery'
 export { CustomSerialise } from './decorators/customSerialiser'

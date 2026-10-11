@@ -23,6 +23,27 @@ TypeScript types disappear at runtime. RIFTTypeMorph gives a class an explicit r
 - deep duplication and validated immutable-style updates with `cloneWith`
 - inheritance-aware schemas
 
+## Mutable React state updates
+
+`updateWith(instance, changes)` provides a new React-visible object identity without copying
+the underlying domain object. Unlike `cloneWith`, it deliberately **mutates the
+original instance**; all existing references and previous update handles observe
+the same updated data. For example, pass
+`setTask(previous => updateWith(previous, { percentComplete: 0.4 }))`
+to a React state setter. The returned handle is a lightweight `Proxy` of the
+original class instance, preserving `instanceof`, public methods, and TypeMorph
+serialization. No nested objects or arrays are copied.
+
+This is **mutable shared state**, not immutable history: previous React state
+references also see new values. React components memoized on unchanged nested
+references are not automatically invalidated. `updateWith` checks schema field
+names and basic required/array/object shapes, but does not deeply validate or
+rehydrate replacement values. Use `cloneWith` when independent snapshots or
+full schema-driven reconstruction are required. Other code that mutates the
+original directly still needs an `updateWith` call to notify React.
+
+For worked examples and limitations, see the [dedicated `updateWith` guide](https://github.com/RIFTCS/RIFTTypeMorph/blob/master/guidance/updateWith.md).
+
 ## Installation
 
 RIFTTypeMorph is published on npm as [`@riftcs/rifttypemorph`](https://www.npmjs.com/package/@riftcs/rifttypemorph):
